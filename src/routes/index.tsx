@@ -1,10 +1,27 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
+
+const PLANS = {
+  monthly: {
+    starter: 49,
+    pro: 99,
+    shop: 199,
+  },
+  annual: {
+    starter: 39,
+    pro: 79,
+    shop: 159,
+  },
+};
 
 export const Route = createFileRoute("/")({
   component: Home,
 });
 
 function Home() {
+  const [annual, setAnnual] = useState(false);
+  const prices = annual ? PLANS.annual : PLANS.monthly;
+
   return (
     <div className="flex min-h-dvh flex-col">
       {/* Nav */}
@@ -32,9 +49,6 @@ function Home() {
 
       {/* Hero */}
       <section className="flex flex-1 flex-col items-center justify-center px-6 py-24 text-center">
-        <span className="mb-4 rounded-full bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-          Coming soon
-        </span>
         <h1 className="max-w-3xl text-5xl font-bold tracking-tight sm:text-6xl">
           Win more profitable work with{" "}
           <span className="text-indigo-600 dark:text-indigo-400">less overhead</span>
@@ -111,10 +125,35 @@ function Home() {
           <p className="mt-4 text-center text-gray-600 dark:text-gray-400">
             Start free for 14 days. No credit card required.
           </p>
-          <div className="mt-12 grid gap-8 sm:grid-cols-3">
+
+          {/* Billing toggle */}
+          <div className="mt-8 flex items-center justify-center gap-3 text-sm">
+            <span className={`font-medium ${annual ? "text-gray-400" : "text-gray-900 dark:text-gray-100"}`}>
+              Monthly
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={annual}
+              onClick={() => setAnnual(!annual)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${annual ? "bg-indigo-600" : "bg-gray-300 dark:bg-gray-700"}`}
+            >
+              <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${annual ? "translate-x-5" : "translate-x-0"}`} />
+            </button>
+            <span className={`font-medium ${annual ? "text-gray-900 dark:text-gray-100" : "text-gray-400"}`}>
+              Annual{" "}
+              <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-950 dark:text-green-400">
+                Save 20%
+              </span>
+            </span>
+          </div>
+
+          <div className="mt-8 grid gap-8 sm:grid-cols-3">
             <div className="rounded-xl border border-gray-200 p-6 dark:border-gray-800">
               <h3 className="text-lg font-semibold">Starter</h3>
-              <p className="mt-2 text-3xl font-bold">$49<span className="text-base font-normal text-gray-500">/mo</span></p>
+              <p className="mt-2 text-3xl font-bold">
+                ${prices.starter}<span className="text-base font-normal text-gray-500">/{annual ? "mo billed annually" : "mo"}</span>
+              </p>
               <ul className="mt-6 space-y-3 text-sm text-gray-600 dark:text-gray-400">
                 <li className="flex items-center gap-2">✓ Single user</li>
                 <li className="flex items-center gap-2">✓ Core estimating</li>
@@ -124,7 +163,9 @@ function Home() {
             <div className="rounded-xl border-2 border-indigo-600 bg-indigo-50 p-6 dark:border-indigo-500 dark:bg-indigo-950">
               <span className="rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white">Popular</span>
               <h3 className="mt-2 text-lg font-semibold">Pro</h3>
-              <p className="mt-2 text-3xl font-bold">$99<span className="text-base font-normal text-gray-500">/mo</span></p>
+              <p className="mt-2 text-3xl font-bold">
+                ${prices.pro}<span className="text-base font-normal text-gray-500">/{annual ? "mo billed annually" : "mo"}</span>
+              </p>
               <ul className="mt-6 space-y-3 text-sm text-gray-600 dark:text-gray-400">
                 <li className="flex items-center gap-2">✓ Up to 5 users</li>
                 <li className="flex items-center gap-2">✓ Custom assemblies</li>
@@ -133,7 +174,9 @@ function Home() {
             </div>
             <div className="rounded-xl border border-gray-200 p-6 dark:border-gray-800">
               <h3 className="text-lg font-semibold">Shop</h3>
-              <p className="mt-2 text-3xl font-bold">$199<span className="text-base font-normal text-gray-500">/mo</span></p>
+              <p className="mt-2 text-3xl font-bold">
+                ${prices.shop}<span className="text-base font-normal text-gray-500">/{annual ? "mo billed annually" : "mo"}</span>
+              </p>
               <ul className="mt-6 space-y-3 text-sm text-gray-600 dark:text-gray-400">
                 <li className="flex items-center gap-2">✓ Unlimited users</li>
                 <li className="flex items-center gap-2">✓ Job costing</li>
@@ -141,6 +184,11 @@ function Home() {
               </ul>
             </div>
           </div>
+          {annual && (
+            <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
+              Annual plans are billed at ${prices.starter * 12}, ${prices.pro * 12}, and ${prices.shop * 12} per year respectively.
+            </p>
+          )}
         </div>
       </section>
 
