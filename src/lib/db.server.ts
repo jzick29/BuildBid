@@ -51,6 +51,9 @@ export async function getDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_line_items_estimate ON line_items(estimate_id);
   `);
+  // Migrate: add subscription columns if they don't exist
+  try { db.run("ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'"); } catch {}
+  try { db.run("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT DEFAULT NULL"); } catch {}
   db.run("DELETE FROM sessions WHERE expires_at < datetime('now')");
   _db = db;
   _initialized = true;

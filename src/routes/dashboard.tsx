@@ -44,6 +44,11 @@ function Dashboard() {
     router.navigate({ to: "/" });
   };
 
+  const planLabel = user.plan === "free" ? "Free" : user.plan?.charAt(0).toUpperCase() + user.plan?.slice(1);
+  const planBadgeColor = user.plan === "free"
+    ? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+    : "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400";
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="border-b border-gray-200 dark:border-gray-800">
@@ -58,6 +63,12 @@ function Dashboard() {
             <Link to="/estimates" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
               Estimates
             </Link>
+            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${planBadgeColor}`}>
+              {planLabel}
+              {user.plan === "free" && (
+                <Link to="/" className="ml-1 underline hover:no-underline">Upgrade</Link>
+              )}
+            </span>
             <span className="text-gray-600 dark:text-gray-400">
               {user.name || user.email}
             </span>

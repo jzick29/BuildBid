@@ -159,6 +159,12 @@ function Home() {
                 <li className="flex items-center gap-2">✓ Core estimating</li>
                 <li className="flex items-center gap-2">✓ Basic templates</li>
               </ul>
+              <a
+                href="https://buy.stripe.com/dRmaEZ7ej5np8B8g5t57W0o"
+                className="mt-6 block w-full rounded-lg bg-gray-900 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+              >
+                Subscribe — ${prices.starter}/mo
+              </a>
             </div>
             <div className="rounded-xl border-2 border-indigo-600 bg-indigo-50 p-6 dark:border-indigo-500 dark:bg-indigo-950">
               <span className="rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white">Popular</span>
@@ -171,6 +177,12 @@ function Home() {
                 <li className="flex items-center gap-2">✓ Custom assemblies</li>
                 <li className="flex items-center gap-2">✓ Branded proposals</li>
               </ul>
+              <a
+                href="https://buy.stripe.com/8x29AVgOT4jl04C5qP57W0o"
+                className="mt-6 block w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-center text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"
+              >
+                Subscribe — ${prices.pro}/mo
+              </a>
             </div>
             <div className="rounded-xl border border-gray-200 p-6 dark:border-gray-800">
               <h3 className="text-lg font-semibold">Shop</h3>
@@ -182,6 +194,12 @@ function Home() {
                 <li className="flex items-center gap-2">✓ Job costing</li>
                 <li className="flex items-center gap-2">✓ Integrations</li>
               </ul>
+              <a
+                href="https://buy.stripe.com/7sYcN7fKPg23cRo8D157W0q"
+                className="mt-6 block w-full rounded-lg bg-gray-900 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+              >
+                Subscribe — ${prices.shop}/mo
+              </a>
             </div>
           </div>
           {annual && (

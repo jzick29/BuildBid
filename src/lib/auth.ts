@@ -106,11 +106,11 @@ export const getCurrentUser = createServerFn({ method: "GET" }).handler(async ()
   if (!token) return { user: null };
   const db = await getDb();
   const row = db.query(
-    "SELECT u.id, u.email, u.name FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > datetime('now')"
+    "SELECT u.id, u.email, u.name, u.plan FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > datetime('now')"
   ).get(token) as any;
   if (!row) {
     deleteCookie(SESSION_COOKIE, { path: "/" });
     return { user: null };
   }
-  return { user: { id: row.id, email: row.email, name: row.name } };
+  return { user: { id: row.id, email: row.email, name: row.name, plan: row.plan || "free" } };
 });
