@@ -50,10 +50,22 @@ export async function getDb() {
       sort_order INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_line_items_estimate ON line_items(estimate_id);
+    CREATE TABLE IF NOT EXISTS proposals (
+      id TEXT PRIMARY KEY,
+      estimate_id TEXT NOT NULL REFERENCES estimates(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      proposal_number TEXT NOT NULL,
+      terms TEXT DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_proposals_estimate ON proposals(estimate_id);
+    CREATE INDEX IF NOT EXISTS idx_proposals_user ON proposals(user_id);
   `);
   // Migrate: add subscription columns if they don't exist
   try { db.run("ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'"); } catch {}
   try { db.run("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT DEFAULT NULL"); } catch {}
+  try { db.run("ALTER TABLE proposals ADD COLUMN pdf_data TEXT DEFAULT NULL"); } catch {}
   db.run("DELETE FROM sessions WHERE expires_at < datetime('now')");
   _db = db;
   _initialized = true;
