@@ -38,7 +38,7 @@ function Home() {
               Pricing
             </a>
             <Link
-              to="/dashboard"
+              to="/signup"
               className="rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700"
             >
               Get Started
@@ -59,7 +59,7 @@ function Home() {
         </p>
         <div className="mt-10 flex gap-4">
           <Link
-            to="/dashboard"
+            to="/signup"
             className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"
           >
             Start Estimating Free
