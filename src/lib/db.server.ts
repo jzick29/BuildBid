@@ -61,6 +61,25 @@ export async function getDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_proposals_estimate ON proposals(estimate_id);
     CREATE INDEX IF NOT EXISTS idx_proposals_user ON proposals(user_id);
+    CREATE TABLE IF NOT EXISTS templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      trade_type TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_templates_trade ON templates(trade_type);
+    CREATE TABLE IF NOT EXISTS template_line_items (
+      id TEXT PRIMARY KEY,
+      template_id TEXT NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+      description TEXT NOT NULL,
+      quantity REAL NOT NULL DEFAULT 1,
+      unit TEXT NOT NULL DEFAULT 'each',
+      unit_cost REAL NOT NULL DEFAULT 0,
+      markup_percent REAL NOT NULL DEFAULT 10,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_tli_template ON template_line_items(template_id);
   `);
   // Migrate: add subscription columns if they don't exist
   try { db.run("ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'"); } catch {}
