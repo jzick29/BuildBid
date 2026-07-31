@@ -282,10 +282,10 @@ export const createEstimateFromTemplate = createServerFn({ method: "POST" })
     
     const items = db.query("SELECT * FROM template_line_items WHERE template_id = ? ORDER BY sort_order").all(data.templateId) as any[];
     
-    const estimateId = mod.createEstimate(user.id, data.projectName.trim(), data.customerName.trim(), tpl.trade_type);
+    const estimateId = await mod.createEstimate(user.id, data.projectName.trim(), data.customerName.trim(), tpl.trade_type);
     
     for (const item of items) {
-      mod.addLineItem(estimateId, {
+      await mod.addLineItem(estimateId, {
         description: item.description,
         quantity: item.quantity,
         unit: item.unit,

@@ -21,7 +21,7 @@ async function requireUser() {
 export const listEstimates = createServerFn({ method: "GET" }).handler(async () => {
   const user = await requireUser();
   const mod = await import("./db.server");
-  return mod.getEstimatesByUser(user.id);
+  return await mod.getEstimatesByUser(user.id);
 });
 
 export const getEstimate = createServerFn({ method: "GET" })
@@ -29,9 +29,9 @@ export const getEstimate = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const user = await requireUser();
     const mod = await import("./db.server");
-    const est = mod.getEstimateById(data.id);
+    const est = await mod.getEstimateById(data.id);
     if (!est || est.user_id !== user.id) throw redirect({ to: "/estimates" });
-    const items = mod.getLineItems(data.id);
+    const items = await mod.getLineItems(data.id);
     return { estimate: est, lineItems: items };
   });
 
@@ -46,7 +46,7 @@ export const createEstimate = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const user = await requireUser();
     const mod = await import("./db.server");
-    const id = mod.createEstimate(user.id, data.projectName.trim(), data.customerName.trim(), data.trade);
+    const id = await mod.createEstimate(user.id, data.projectName.trim(), data.customerName.trim(), data.trade);
     return { id };
   });
 
@@ -60,7 +60,7 @@ export const addLineItem = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireUser();
     const mod = await import("./db.server");
-    mod.addLineItem(data.estimateId, {
+    await mod.addLineItem(data.estimateId, {
       description: data.description.trim(),
       quantity: data.quantity || 1,
       unit: data.unit || "each",
@@ -75,7 +75,7 @@ export const removeLineItem = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireUser();
     const mod = await import("./db.server");
-    mod.deleteLineItem(data.id);
+    await mod.deleteLineItem(data.id);
     return { success: true };
   });
 
@@ -84,7 +84,7 @@ export const updateEstimateStatus = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireUser();
     const mod = await import("./db.server");
-    mod.updateEstimate(data.id, { status: data.status });
+    await mod.updateEstimate(data.id, { status: data.status });
     return { success: true };
   });
 
@@ -93,7 +93,7 @@ export const deleteEstimate = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireUser();
     const mod = await import("./db.server");
-    mod.deleteEstimate(data.id);
+    await mod.deleteEstimate(data.id);
     return { success: true };
   });
 

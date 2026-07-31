@@ -26,9 +26,9 @@ export const generateProposal = createServerFn({ method: "POST" })
     const mod = await import("./db.server");
     
     // Get estimate + line items
-    const est = mod.getEstimateById(data.estimateId);
+    const est = await mod.getEstimateById(data.estimateId);
     if (!est || est.user_id !== user.id) throw redirect({ to: "/estimates" });
-    const items = mod.getLineItems(data.estimateId);
+    const items = await mod.getLineItems(data.estimateId);
     
     // Generate proposal number
     const db = await (await import("./db.server")).getDb();
