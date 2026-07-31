@@ -3,24 +3,49 @@ import { setCookie, getCookie, deleteCookie } from "@tanstack/react-start/server
 import { redirect } from "@tanstack/react-router";
 
 const SESSION_COOKIE = "buildbid_session";
+const isVercel = typeof process !== 'undefined' && !!process.env.VERCEL;
 
 // --- Inline SQLite helpers (server-only, never bundled for client) ---
 // Using Bun's SQLite via dynamic import so Vite doesn't trace it at build time
 
+function createNoopDb() {
+  const noop = () => {};
+  const emptyArr: any[] = [];
+  return {
+    exec: noop, run: noop,
+    prepare: () => ({ all: () => emptyArr, get: () => null, run: noop }),
+    query: () => ({ all: () => emptyArr, get: () => null, run: noop }),
+  };
+}
+
+let _authDb: any = null;
+
 async function getDb() {
-  const { Database } = await import("bun:sqlite");
+  if (_authDb) return _authDb;
+  if (isVercel) { _authDb = createNoopDb(); return _authDb; }
+  let Database: any;
+  try {
+    Database = (await import("bun:sqlite")).Database;
+  } catch {
+    _authDb = createNoopDb(); return _authDb;
+  }
   const { existsSync, mkdirSync } = await import("fs");
-  const dir = `${import.meta.dir}/../../data`;
+  const dir = (typeof import.meta.dir !== 'undefined' ? import.meta.dir : '/tmp') + '/../../data';
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const db = new Database(`${dir}/app.db`);
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA foreign_keys = ON");
+  // Migrate existing DB: add subscription columns if missing
+  try { db.exec("ALTER TABLE users ADD COLUMN subscription_tier TEXT NOT NULL DEFAULT 'trial'"); } catch (_) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN trial_ends_at TEXT"); } catch (_) {}
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL DEFAULT '',
       password_hash TEXT NOT NULL,
+      subscription_tier TEXT NOT NULL DEFAULT 'trial',
+      trial_ends_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS sessions (
@@ -49,7 +74,8 @@ export const signup = createServerFn({ method: "POST" })
     const db = await getDb();
     const id = crypto.randomUUID();
     const passwordHash = Bun.password.hashSync(data.password, { algorithm: "bcrypt", cost: 10 });
-    db.run("INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, ?)", [id, data.email, data.name, passwordHash]);
+    const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    db.run("INSERT INTO users (id, email, name, password_hash, subscription_tier, trial_ends_at) VALUES (?, ?, ?, ?, 'trial', ?)", [id, data.email, data.name, passwordHash, trialEndsAt]);
     const token = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + SESSION_DURATION_MS).toISOString();
     db.run("INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)", [token, id, expiresAt]);
@@ -106,13 +132,13 @@ export const getCurrentUser = createServerFn({ method: "GET" }).handler(async ()
   if (!token) return { user: null };
   const db = await getDb();
   const row = db.query(
-    "SELECT u.id, u.email, u.name, u.plan FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > datetime('now')"
+    "SELECT u.id, u.email, u.name, u.subscription_tier, u.trial_ends_at, u.stripe_customer_id FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > datetime('now')"
   ).get(token) as any;
   if (!row) {
     deleteCookie(SESSION_COOKIE, { path: "/" });
     return { user: null };
   }
-  return { user: { id: row.id, email: row.email, name: row.name, plan: row.plan || "free" } };
+  return { user: { id: row.id, email: row.email, name: row.name, subscriptionTier: row.subscription_tier || "trial", trialEndsAt: row.trial_ends_at, stripeCustomerId: row.stripe_customer_id } };
 });
 
 // Server function: request password reset
@@ -190,4 +216,22 @@ export const resetPassword = createServerFn({ method: "POST" })
     // Delete all sessions for this user (force re-login)
     db.run("DELETE FROM sessions WHERE user_id = ?", [row.user_id]);
     return { success: true };
+  });
+
+
+// Server function: upgrade user subscription after successful payment
+export const upgradeSubscription = createServerFn({ method: "POST" })
+  .validator((data: unknown) => {
+    const d = data as { tier?: string };
+    if (!d.tier || !["starter", "pro", "shop"].includes(d.tier)) throw new Error("Invalid tier");
+    return d as { tier: string };
+  })
+  .handler(async ({ data }) => {
+    const token = getCookie(SESSION_COOKIE);
+    if (!token) throw new Error("Not authenticated");
+    const db = await getDb();
+    const session = db.query("SELECT user_id FROM sessions WHERE id = ? AND expires_at > datetime('now')").get(token) as any;
+    if (!session) throw new Error("Session expired");
+    db.run("UPDATE users SET subscription_tier = ? WHERE id = ?", [data.tier, session.user_id]);
+    return { success: true, tier: data.tier };
   });
