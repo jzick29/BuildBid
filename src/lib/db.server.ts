@@ -649,8 +649,9 @@ export async function getDb() {
     CREATE INDEX IF NOT EXISTS idx_co_estimate ON change_orders(estimate_id);
     CREATE INDEX IF NOT EXISTS idx_coi_co ON change_order_items(change_order_id);
   `);
-  // Migrate: add subscription columns if they don't exist
-  try { db.run("ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'"); } catch {}
+  // Migrate: add columns if they don't exist
+  try { db.run("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'"); } catch {}
+  try { db.run("ALTER TABLE users ADD COLUMN frozen INTEGER NOT NULL DEFAULT 0"); } catch {}
   try { db.run("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT DEFAULT NULL"); } catch {}
   try { db.run("ALTER TABLE proposals ADD COLUMN pdf_data TEXT DEFAULT NULL"); } catch {}
   try { db.run("ALTER TABLE proposals ADD COLUMN sent_to_email TEXT DEFAULT NULL"); } catch {}
@@ -658,6 +659,19 @@ export async function getDb() {
   try { db.run("ALTER TABLE line_items ADD COLUMN material_id TEXT DEFAULT NULL"); } catch {}
   try { db.run("ALTER TABLE invoices ADD COLUMN payment_link_id TEXT DEFAULT NULL"); } catch {}
   try { db.run("ALTER TABLE estimates ADD COLUMN contract_id TEXT DEFAULT NULL"); } catch {}
+  // Seed admin: if ADMIN_EMAIL is set, promote that user to admin.
+  // Otherwise, promote the first-created user (lowest created_at).
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+    if (adminEmail) {
+      db.run("UPDATE users SET role = 'admin' WHERE email = ?", [adminEmail]);
+    } else {
+      // No ADMIN_EMAIL: make the earliest user (by created_at) an admin
+      db.run(`UPDATE users SET role = 'admin' WHERE id = (
+        SELECT id FROM users ORDER BY created_at ASC LIMIT 1
+      ) AND role != 'admin'`);
+    }
+  } catch {}
   db.run("DELETE FROM sessions WHERE expires_at < datetime('now')");
   _db = db;
   _initialized = true;

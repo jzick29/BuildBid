@@ -75,7 +75,12 @@ export const signup = createServerFn({ method: "POST" })
     const id = crypto.randomUUID();
     const passwordHash = Bun.password.hashSync(data.password, { algorithm: "bcrypt", cost: 10 });
     const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-    db.run("INSERT INTO users (id, email, name, password_hash, subscription_tier, trial_ends_at) VALUES (?, ?, ?, ?, 'trial', ?)", [id, data.email, data.name, passwordHash, trialEndsAt]);
+    // First user is admin if ADMIN_EMAIL not set (or email matches ADMIN_EMAIL)
+    const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+    const userCount = (db.query("SELECT COUNT(*) as c FROM users").get() as any)?.c || 0;
+    const isFirstUser = userCount === 0;
+    const role = (isFirstUser && !adminEmail) || data.email === adminEmail ? "admin" : "user";
+    db.run("INSERT INTO users (id, email, name, password_hash, subscription_tier, trial_ends_at, role) VALUES (?, ?, ?, ?, 'trial', ?, ?)", [id, data.email, data.name, passwordHash, trialEndsAt, role]);
     const token = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + SESSION_DURATION_MS).toISOString();
     db.run("INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)", [token, id, expiresAt]);
@@ -98,8 +103,9 @@ export const login = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const db = await getDb();
-    const row = db.query("SELECT id, email, name, password_hash FROM users WHERE email = ?").get(data.email) as any;
+    const row = db.query("SELECT id, email, name, password_hash, frozen FROM users WHERE email = ?").get(data.email) as any;
     if (!row) throw new Error("Invalid email or password");
+    if (row.frozen === 1) throw new Error("This account has been suspended. Contact support.");
     const valid = Bun.password.verifySync(data.password, row.password_hash);
     if (!valid) throw new Error("Invalid email or password");
     const token = crypto.randomUUID();
@@ -132,13 +138,17 @@ export const getCurrentUser = createServerFn({ method: "GET" }).handler(async ()
   if (!token) return { user: null };
   const db = await getDb();
   const row = db.query(
-    "SELECT u.id, u.email, u.name, u.subscription_tier, u.trial_ends_at, u.stripe_customer_id FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > datetime('now')"
+    "SELECT u.id, u.email, u.name, u.subscription_tier, u.trial_ends_at, u.stripe_customer_id, u.role, u.frozen FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > datetime('now')"
   ).get(token) as any;
   if (!row) {
     deleteCookie(SESSION_COOKIE, { path: "/" });
     return { user: null };
   }
-  return { user: { id: row.id, email: row.email, name: row.name, subscriptionTier: row.subscription_tier || "trial", trialEndsAt: row.trial_ends_at, stripeCustomerId: row.stripe_customer_id } };
+  if (row.frozen === 1) {
+    deleteCookie(SESSION_COOKIE, { path: "/" });
+    return { user: null };
+  }
+  return { user: { id: row.id, email: row.email, name: row.name, subscriptionTier: row.subscription_tier || "trial", trialEndsAt: row.trial_ends_at, stripeCustomerId: row.stripe_customer_id, role: row.role || "user", isAdmin: row.role === "admin" } };
 });
 
 // Server function: request password reset
