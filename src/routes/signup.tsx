@@ -24,6 +24,8 @@ function SignupPage() {
       if (result.success) {
         // Fire welcome email (non-blocking)
         sendWelcomeEmail({ data: { email: result.user.email, name: result.user.name } }).catch(console.error);
+        // Track conversion
+        if (typeof window !== "undefined") (window as any).__buildbidTrack?.("signup");
         router.navigate({ to: "/dashboard" });
       }
     } catch (err: any) {

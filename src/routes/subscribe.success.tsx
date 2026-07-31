@@ -1,20 +1,39 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { getCurrentUser } from "~/lib/auth";
+import { upgradeSubscription } from "~/lib/auth";
 
-const getPlanFromQuery = createServerFn({ method: "GET" })
+const handleUpgrade = createServerFn({ method: "GET" })
   .validator((d: unknown) => d as { plan?: string })
   .handler(async ({ data }) => {
-    const user = await getCurrentUser();
-    if (!user.user) throw redirect({ to: "/login" });
-    return { plan: data.plan || "starter" };
+    const plan = data.plan && ["starter", "pro", "shop"].includes(data.plan) ? data.plan : "starter";
+    try {
+      const result = await upgradeSubscription({ data: { tier: plan } });
+      return { upgraded: result.success, plan };
+    } catch (_) {
+      throw redirect({ to: "/login" });
+    }
   });
 
 export const Route = createFileRoute("/subscribe/success")({
+  loader: async ({ params }: any) => {
+    // The loader gets search params via the request
+    return {};
+  },
   component: SuccessPage,
 });
 
 function SuccessPage() {
+  // Call handleUpgrade on mount via a hidden form approach
+  // We pass plan from the URL query string
+  if (typeof window !== "undefined") {
+    const sp = new URLSearchParams(window.location.search);
+    const plan = sp.get("plan") || "starter";
+    // Call the server function
+    handleUpgrade({ data: { plan } }).catch(() => {});
+    // Track subscription conversion
+    if (typeof window !== "undefined") (window as any).__buildbidTrack?.("subscription");
+  }
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="border-b border-gray-200 dark:border-gray-800">
@@ -39,7 +58,7 @@ function SuccessPage() {
           </div>
           <h1 className="mt-6 text-2xl font-bold text-green-800 dark:text-green-300">Subscription Successful!</h1>
           <p className="mt-2 text-green-700 dark:text-green-400">
-            Welcome to BuildBid! Your account has been upgraded. You now have full access to all features.
+            Your BuildBid account has been upgraded. You now have full access to all your plan's features.
           </p>
           <div className="mt-8 flex justify-center gap-4">
             <Link
