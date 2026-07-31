@@ -7,7 +7,7 @@ async function requireUser() {
   const token = getCookie("buildbid_session");
   if (!token) throw redirect({ to: "/login" });
   const row = db.query(
-    "SELECT u.id, u.email, u.name, u.plan, u.stripe_customer_id FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > datetime('now')"
+    "SELECT u.id, u.email, u.name, u.subscription_tier, u.stripe_customer_id FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > datetime('now')"
   ).get(token) as any;
   if (!row) {
     deleteCookie("buildbid_session", { path: "/" });
@@ -39,7 +39,7 @@ export function getPlanPrices(plan: string) {
 export const getSubscriptionStatus = createServerFn({ method: "GET" }).handler(async () => {
   const user = await requireUser();
   return {
-    plan: user.plan,
+    plan: user.subscription_tier,
     stripeCustomerId: user.stripe_customer_id,
   };
 });
@@ -52,9 +52,9 @@ export const activateSubscription = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const user = await requireUser();
-    if (user.plan !== "free") throw new Error("Already subscribed");
+    if (user.subscription_tier !== "free") throw new Error("Already subscribed");
     const db = await (await import("./db.server")).getDb();
-    db.run("UPDATE users SET plan = ?, stripe_customer_id = COALESCE(?, stripe_customer_id) WHERE id = ?",
+    db.run("UPDATE users SET subscription_tier = ?, stripe_customer_id = COALESCE(?, stripe_customer_id) WHERE id = ?",
       [data.plan, data.stripeCustomerId || null, user.id]);
     return { success: true, plan: data.plan };
   });
@@ -62,6 +62,6 @@ export const activateSubscription = createServerFn({ method: "POST" })
 export const cancelSubscription = createServerFn({ method: "POST" }).handler(async () => {
   const user = await requireUser();
   const db = await (await import("./db.server")).getDb();
-  db.run("UPDATE users SET plan = 'free' WHERE id = ?", [user.id]);
+  db.run("UPDATE users SET subscription_tier = 'free' WHERE id = ?", [user.id]);
   return { success: true };
 });
