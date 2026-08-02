@@ -1,22 +1,40 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
-import { listEstimates, deleteEstimate, getCurrentUser } from "~/lib/estimates";
+import { useState, useEffect } from "react";
+import { deleteEstimate } from "~/lib/estimates";
 import { logout } from "~/lib/auth";
 
 export const Route = createFileRoute("/estimates")({
-  loader: async () => {
-    const { user } = await getCurrentUser();
-    if (!user) throw new (await import("@tanstack/react-router")).redirect({ to: "/login" });
-    const estimates = await listEstimates();
-    return { user, estimates };
-  },
+  loader: async () => ({}),
   component: EstimatesList,
 });
 
 function EstimatesList() {
   const router = useRouter();
-  const { user, estimates } = Route.useLoaderData();
+  const [user, setUser] = useState<any>(null);
+  const [estimates, setEstimates] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/me", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => {
+        if (!d.user) { window.location.href = "/login"; return; }
+        setUser(d.user);
+        return fetch("/api/call", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ function: "estimates.listEstimates", args: {} }),
+          credentials: "include",
+        });
+      })
+      .then(r => r?.json())
+      .then(d => { if (d?.estimates) setEstimates(d.estimates); })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this estimate?")) return;
     setDeleting(id);
@@ -24,6 +42,11 @@ function EstimatesList() {
     router.navigate({ to: "/estimates" });
   };
   const handleLogout = async () => { await logout(); router.navigate({ to: "/" }); };
+
+  if (loading) return <div className="flex min-h-dvh items-center justify-center"><p className="text-gray-500">Loading...</p></div>;
+  if (error) return <div className="flex min-h-dvh items-center justify-center"><p className="text-red-500">{error}</p></div>;
+  if (!user) return null;
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="border-b border-gray-200 dark:border-gray-800">

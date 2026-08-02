@@ -1,17 +1,34 @@
-import { createFileRoute, Link, useRouter, redirect } from "@tanstack/react-router";
-import { createServerFn } from "@tanstack/react-start";
-import { getCurrentUser, logout } from "~/lib/auth";
-import { listEstimates } from "~/lib/estimates";
-import { submitFeedback } from "~/lib/feedback";
-import { getRecentViews } from "~/lib/tracking";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
+import { logout } from "~/lib/auth";
+import { submitFeedback } from "~/lib/feedback";
+
+export const Route = createFileRoute("/dashboard")({
+  loader: async () => ({}),
+  component: Dashboard,
+});
+
+const statusColors: Record<string, string> = {
+  draft: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300",
+  sent: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
+  won: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
+  lost: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+};
 
 function UpcomingJobs() {
   const [jobs, setJobs] = useState<any[]>([]);
   useEffect(() => {
     const now = new Date();
     const month = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
-    import("~/lib/scheduling").then(m => m.getScheduledJobs({ data: { month } }).then(j => setJobs(j.slice(0,5)))).catch(() => {});
+    fetch("/api/call", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ function: "scheduling.getScheduledJobs", args: { data: { month } } }),
+      credentials: "include",
+    })
+    .then(r => r.json())
+    .then(j => { if (Array.isArray(j)) setJobs(j.slice(0,5)); })
+    .catch(() => {});
   }, []);
   if (jobs.length === 0) return null;
   return (
@@ -26,57 +43,14 @@ function UpcomingJobs() {
   );
 }
 
-const getDashboardData = createServerFn({ method: "GET" }).handler(async () => {
-  const estimates = await listEstimates();
-  const mod = await import("~/lib/db.server");
-  const db = await mod.getDb();
-  const views = db.query(
-    "SELECT pv.*, e.project_name, e.customer_name FROM proposal_views pv JOIN estimates e ON e.id = pv.estimate_id ORDER BY pv.viewed_at DESC LIMIT 5"
-  ).all() as any[];
-  return {
-    totalEstimates: estimates.length,
-    draftCount: estimates.filter((e: any) => e.status === "draft").length,
-    wonCount: estimates.filter((e: any) => e.status === "won").length,
-    lostCount: estimates.filter((e: any) => e.status === "lost").length,
-    recentEstimates: estimates.slice(0, 5),
-    recentActivity: views,
-  };
-});
-
-export const Route = createFileRoute("/dashboard")({
-  loader: async () => {
-    let expiringContracts: any[] = [];
-    let upcomingVisits: any[] = [];
-    try { expiringContracts = await getExpiringContracts(); } catch {}
-    try { upcomingVisits = await getUpcomingVisits({ data: { days: 14 } }); } catch {}
-
-    const [user, data] = await Promise.all([
-      getCurrentUser(),
-      getDashboardData(),
-    ]);
-    if (!user.user) {
-      throw redirect({ to: "/login" });
-    }
-    const result = { user: user.user, ...data }; return result;
-  },
-  component: Dashboard,
-});
-
-const statusColors: Record<string, string> = {
-  draft: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300",
-  sent: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
-  won: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
-  lost: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-};
-
 function Dashboard() {
   const router = useRouter();
-  const { user, totalEstimates, draftCount, wonCount, lostCount, recentEstimates } = Route.useLoaderData();
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
-  useEffect(() => {
-    getRecentViews().then(rows => rows && setRecentActivity(rows.slice(0, 5))).catch(() => {});
-  }, []);
+  const [user, setUser] = useState<any>(null);
+  const [estimates, setEstimates] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState("");
   const [feedbackRating, setFeedbackRating] = useState(0);
@@ -88,6 +62,31 @@ function Dashboard() {
     const dismissed = localStorage.getItem("buildbid_tips_dismissed");
     if (dismissed) setTipsDismissed(true);
   }, []);
+
+  useEffect(() => {
+    fetch("/api/me", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => {
+        if (!d.user) { window.location.href = "/login"; return; }
+        setUser(d.user);
+        return fetch("/api/call", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ function: "estimates.listEstimates", args: {} }),
+          credentials: "include",
+        });
+      })
+      .then(r => r?.json())
+      .then(d => { if (d?.estimates) setEstimates(d.estimates); })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const totalEstimates = estimates.length;
+  const draftCount = estimates.filter((e: any) => e.status === "draft").length;
+  const wonCount = estimates.filter((e: any) => e.status === "won").length;
+  const lostCount = estimates.filter((e: any) => e.status === "lost").length;
+  const recentEstimates = estimates.slice(0, 5);
 
   const dismissTips = () => {
     localStorage.setItem("buildbid_tips_dismissed", "1");
@@ -102,7 +101,6 @@ function Dashboard() {
       setFeedbackSent(true);
       setTimeout(() => { setFeedbackOpen(false); setFeedbackSent(false); setFeedbackMsg(""); setFeedbackRating(0); }, 2000);
     } catch (e) {
-      // silently fail
     } finally {
       setFeedbackSubmitting(false);
     }
@@ -113,8 +111,12 @@ function Dashboard() {
     router.navigate({ to: "/" });
   };
 
-  const planLabel = user.subscriptionTier === "free" ? "Free" : (user.subscriptionTier || "trial").charAt(0).toUpperCase() + (user.subscriptionTier || "trial").slice(1);
-  const planBadgeColor = user.subscriptionTier === "free"
+  if (loading) return <div className="flex min-h-dvh items-center justify-center"><p className="text-gray-500">Loading...</p></div>;
+  if (error) return <div className="flex min-h-dvh items-center justify-center"><p className="text-red-500">{error}</p></div>;
+  if (!user) return null;
+
+  const planLabel = (user.subscriptionTier || "trial").charAt(0).toUpperCase() + (user.subscriptionTier || "trial").slice(1);
+  const planBadgeColor = (user.subscriptionTier === "free" || user.subscriptionTier === "trial")
     ? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
     : "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400";
 
@@ -172,8 +174,8 @@ function Dashboard() {
             </Link>
             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${planBadgeColor}`}>
               {planLabel}
-              {user.plan === "free" && (
-                <Link to="/" className="ml-1 underline hover:no-underline">Upgrade</Link>
+              {(user.subscriptionTier === "free" || user.subscriptionTier === "trial") && (
+                <Link to="/subscribe" className="ml-1 underline hover:no-underline">Upgrade</Link>
               )}
             </span>
             <span className="text-gray-600 dark:text-gray-400">
@@ -190,7 +192,6 @@ function Dashboard() {
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-12">
-        {/* Tips Banner */}
         {!tipsDismissed && totalEstimates === 0 && (
           <div className="mb-8 flex items-center justify-between rounded-lg border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-800 dark:bg-indigo-950/30">
             <div className="flex items-center gap-3">
@@ -241,7 +242,6 @@ function Dashboard() {
           </Link>
         </div>
 
-        {/* Stats cards */}
         <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Estimates</p>
@@ -261,7 +261,6 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* Recent estimates */}
         <div className="mt-10">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Recent Estimates</h2>
@@ -316,34 +315,13 @@ function Dashboard() {
             </div>
           )}
         </div>
-        {/* Upcoming Jobs */}
+
         <div className="mt-10">
           <h2 className="text-xl font-semibold">Upcoming Jobs</h2>
           <UpcomingJobs />
         </div>
-
-        {/* Recent Proposal Activity */}
-        {recentActivity.length > 0 && (
-          <div className="mt-10">
-            <h2 className="text-xl font-semibold">Recent Proposal Activity</h2>
-            <div className="mt-4 space-y-2">
-              {recentActivity.map((act: any) => (
-                <div key={act.id} className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 text-sm dark:border-gray-800">
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-green-500"></span>
-                  <span>
-                    <strong>{act.customer_name}</strong> opened <em>{act.project_name}</em>
-                  </span>
-                  <span className="ml-auto text-xs text-gray-400 dark:text-gray-500">
-                    {new Date(act.viewed_at + "Z").toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </main>
 
-      {/* Feedback floating button */}
       <button
         onClick={() => setFeedbackOpen(true)}
         className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:bg-indigo-700 transition-colors"
@@ -354,7 +332,6 @@ function Dashboard() {
         Feedback
       </button>
 
-      {/* Feedback modal */}
       {feedbackOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setFeedbackOpen(false)}>
           <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-2xl dark:bg-gray-900" onClick={e => e.stopPropagation()}>
@@ -364,7 +341,6 @@ function Dashboard() {
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-
             {feedbackSent ? (
               <div className="mt-6 rounded-lg bg-green-50 p-4 text-center text-sm font-medium text-green-700 dark:bg-green-950/30 dark:text-green-400">
                 Thanks for your feedback!

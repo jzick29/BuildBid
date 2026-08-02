@@ -1,15 +1,8 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { useState } from "react";
-import { getCurrentUser } from "~/lib/auth";
-import { getTemplates, createEstimateFromTemplate } from "~/lib/templates";
+import { useState, useEffect } from "react";
 
 export const Route = createFileRoute("/templates")({
-  loader: async () => {
-    const { user } = await getCurrentUser();
-    if (!user) throw redirect({ to: "/login" });
-    const templates = await getTemplates({ data: undefined });
-    return { user, templates: templates.templates };
-  },
+  loader: async () => ({}),
   component: TemplatesPage,
 });
 
@@ -22,13 +15,35 @@ const tradeColors: Record<string, string> = {
 };
 
 function TemplatesPage() {
-  const { user, templates } = Route.useLoaderData();
+  const [user, setUser] = useState<any>(null);
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTrade, setActiveTrade] = useState<string>("all");
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [projectName, setProjectName] = useState("");
   const [customerName, setCustomerName] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/me", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => {
+        if (!d.user) { window.location.href = "/login"; return; }
+        setUser(d.user);
+        return fetch("/api/call", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ function: "templates.getTemplates", args: {} }),
+          credentials: "include",
+        });
+      })
+      .then(r => r?.json())
+      .then(d => { if (d?.templates) setTemplates(d.templates); })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
 
   const trades = [...new Set(templates.map((t: any) => t.trade_type))];
   const filtered = activeTrade === "all" ? templates : templates.filter((t: any) => t.trade_type === activeTrade);
@@ -42,12 +57,23 @@ function TemplatesPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setCreating(true);
     try {
-      const result = await createEstimateFromTemplate({ data: { templateId: selectedTemplate.id, projectName, customerName } });
-      window.location.href = `/estimates/${result.id}`;
-    } catch (err: any) { alert(err.message); } finally { setLoading(false); }
+      const res = await fetch("/api/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ function: "templates.createEstimateFromTemplate", args: { data: { templateId: selectedTemplate.id, projectName, customerName } } }),
+        credentials: "include",
+      });
+      const d = await res.json();
+      if (d.error) throw new Error(d.error);
+      window.location.href = "/estimates/" + d.id;
+    } catch (err: any) { alert(err.message); } finally { setCreating(false); }
   };
+
+  if (loading) return <div className="flex min-h-dvh items-center justify-center"><p className="text-gray-500">Loading...</p></div>;
+  if (error) return <div className="flex min-h-dvh items-center justify-center"><p className="text-red-500">{error}</p></div>;
+  if (!user) return null;
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -61,7 +87,6 @@ function TemplatesPage() {
           </div>
         </nav>
       </header>
-
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-12">
         <div className="flex items-center justify-between">
           <div>
@@ -70,33 +95,22 @@ function TemplatesPage() {
           </div>
           <Link to="/estimates/new" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Start from Scratch</Link>
         </div>
-
-        {/* Trade filter tabs */}
         <div className="mt-8 flex flex-wrap gap-2">
           <button onClick={() => setActiveTrade("all")} className={`rounded-full px-4 py-1.5 text-sm font-medium ${activeTrade === "all" ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900" : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"}`}>All</button>
           {trades.map((t: any) => (
             <button key={t} onClick={() => setActiveTrade(t)} className={`rounded-full px-4 py-1.5 text-sm font-medium capitalize ${activeTrade === t ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900" : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"}`}>{t}</button>
           ))}
         </div>
-
-        {/* Template grid */}
         <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((tpl: any) => (
             <div key={tpl.id} className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
               <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${tradeColors[tpl.trade_type] || "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"}`}>{tpl.trade_type}</span>
               <h3 className="mt-3 text-base font-semibold">{tpl.name}</h3>
               {tpl.description && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{tpl.description}</p>}
-              <button
-                onClick={() => handleUseTemplate(tpl)}
-                className="mt-4 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
-              >
-                Use This Template
-              </button>
+              <button onClick={() => handleUseTemplate(tpl)} className="mt-4 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Use This Template</button>
             </div>
           ))}
         </div>
-
-        {/* Create from template modal */}
         {showCreate && selectedTemplate && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
             <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-gray-900">
@@ -105,7 +119,7 @@ function TemplatesPage() {
                 <div><label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Project Name</label><input type="text" value={projectName} onChange={e => setProjectName(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800" required /></div>
                 <div><label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Customer Name</label><input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800" required /></div>
                 <div className="flex gap-3">
-                  <button type="submit" disabled={loading} className="flex-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{loading ? "Creating..." : "Create Estimate"}</button>
+                  <button type="submit" disabled={creating} className="flex-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{creating ? "Creating..." : "Create Estimate"}</button>
                   <button type="button" onClick={() => setShowCreate(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900">Cancel</button>
                 </div>
               </form>

@@ -1,29 +1,13 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { createEstimate, getCurrentUser, listEstimates } from "~/lib/estimates";
-import { getTemplates, createEstimateFromTemplate } from "~/lib/templates";
-import { listMaterials } from "~/lib/materials";
+import { createEstimate } from "~/lib/estimates";
 
 export const Route = createFileRoute("/estimates/new")({
-  loader: async () => {
-    const { user } = await getCurrentUser();
-    if (!user) throw new (await import("@tanstack/react-router")).redirect({ to: "/login" });
-    const templates = await getTemplates({ data: undefined });
-    const estimates = await listEstimates();
-    return { user, templates: templates.templates, existingCount: estimates.length };
-  },
+  loader: async () => ({}),
   component: NewEstimate,
 });
 
 const TRADES = ["electrical", "plumbing", "hvac", "roofing", "general", "other"];
-
-const TRADE_BALLPARK: Record<string, string> = {
-  electrical: "$500–$5,000",
-  plumbing: "$400–$3,000",
-  hvac: "$1,500–$6,000",
-  roofing: "$800–$8,000",
-  general: "$1,000–$15,000",
-};
 
 const tradeColors: Record<string, string> = {
   electrical: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300",
@@ -35,50 +19,86 @@ const tradeColors: Record<string, string> = {
 
 function NewEstimate() {
   const router = useRouter();
-  const { templates, existingCount } = Route.useLoaderData();
+  const [user, setUser] = useState<any>(null);
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [existingCount, setExistingCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [projectName, setProjectName] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [trade, setTrade] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [mode, setMode] = useState<"blank" | "template">("blank");
   const [materials, setMaterials] = useState<any[]>([]);
-  const [showMaterialPicker, setShowMaterialPicker] = useState(false);
-  const [matSearch, setMatSearch] = useState("");
-
-  useEffect(() => {
-    listMaterials({ data: undefined }).then(m => setMaterials(m)).catch(() => {});
-  }, []);
   const [selectedTemplate, setSelectedTemplate] = useState("");
 
+  useEffect(() => {
+    fetch("/api/me", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => {
+        if (!d.user) { window.location.href = "/login"; return; }
+        setUser(d.user);
+        return Promise.all([
+          fetch("/api/call", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ function: "templates.getTemplates", args: {} }),
+            credentials: "include",
+          }).then(r => r.json()),
+          fetch("/api/call", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ function: "estimates.listEstimates", args: {} }),
+            credentials: "include",
+          }).then(r => r.json()),
+        ]);
+      })
+      .then(([tplData, estData]) => {
+        if (tplData?.templates) setTemplates(tplData.templates);
+        if (estData?.estimates) setExistingCount(estData.estimates.length);
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(""); setLoading(true);
+    setFormError(""); setSubmitting(true);
     try {
       const result = await createEstimate({ data: { projectName, customerName, trade } });
       if (existingCount === 0 && typeof window !== "undefined") {
         (window as any).__buildbidTrack?.("trial_started");
       }
       router.navigate({ to: `/estimates/${result.id}` });
-    } catch (err: any) { setError(err.message || "Failed"); } finally { setLoading(false); }
+    } catch (err: any) { setFormError(err.message || "Failed"); } finally { setSubmitting(false); }
   };
 
   const handleTemplateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTemplate) { setError("Please select a template"); return; }
-    setError(""); setLoading(true);
+    if (!selectedTemplate) { setFormError("Please select a template"); return; }
+    setFormError(""); setSubmitting(true);
     try {
-      const result = await createEstimateFromTemplate({ data: { templateId: selectedTemplate, projectName, customerName } });
+      const res = await fetch("/api/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ function: "templates.createEstimateFromTemplate", args: { data: { templateId: selectedTemplate, projectName, customerName } } }),
+        credentials: "include",
+      });
+      const d = await res.json();
+      if (d.error) throw new Error(d.error);
       if (existingCount === 0 && typeof window !== "undefined") {
         (window as any).__buildbidTrack?.("trial_started");
       }
-      router.navigate({ to: `/estimates/${result.id}` });
-    } catch (err: any) { setError(err.message || "Failed"); } finally { setLoading(false); }
+      router.navigate({ to: `/estimates/${d.id}` });
+    } catch (err: any) { setFormError(err.message || "Failed"); } finally { setSubmitting(false); }
   };
 
   const filteredTemplates = templates.filter((t: any) => !trade || t.trade_type === trade);
-  const relevantTemplates = templates.filter((t: any) => t.trade_type === trade).slice(0, 3);
+
+  if (loading) return <div className="flex min-h-dvh items-center justify-center"><p className="text-gray-500">Loading...</p></div>;
+  if (error) return <div className="flex min-h-dvh items-center justify-center"><p className="text-red-500">{error}</p></div>;
+  if (!user) return null;
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-12">
@@ -90,17 +110,16 @@ function NewEstimate() {
         <button onClick={() => setMode("template")} className={`flex-1 rounded-md px-4 py-2 text-sm font-medium ${mode === "template" ? "bg-indigo-600 text-white" : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"}`}>Start from Template</button>
       </div>
 
-      {error && <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-950 dark:text-red-400">{error}</div>}
+      {formError && <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-950 dark:text-red-400">{formError}</div>}
 
       <div className="mt-8">
-        {/* Main form */}
         <div>
           {mode === "blank" ? (
             <form onSubmit={handleSubmit} className="space-y-6">
               <div><label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Project Name</label><input type="text" value={projectName} onChange={e => setProjectName(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800" required /></div>
               <div><label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Customer Name</label><input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800" required /></div>
               <div><label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Trade</label><select value={trade} onChange={e => setTrade(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800" required><option value="">Select trade...</option>{TRADES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}</select></div>
-              <button type="submit" disabled={loading} className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{loading ? "Creating..." : "Create Estimate"}</button>
+              <button type="submit" disabled={submitting} className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{submitting ? "Creating..." : "Create Estimate"}</button>
             </form>
           ) : (
             <form onSubmit={handleTemplateSubmit} className="space-y-6">
@@ -125,11 +144,11 @@ function NewEstimate() {
                   </div>
                 )}
               </div>
-              <button type="submit" disabled={loading || !selectedTemplate} className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{loading ? "Creating..." : "Create from Template"}</button>
+              <button type="submit" disabled={submitting || !selectedTemplate} className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{submitting ? "Creating..." : "Create from Template"}</button>
             </form>
           )}
         </div>
-    </div>
+      </div>
     </div>
   );
 }
