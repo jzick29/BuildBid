@@ -1,11 +1,9 @@
 import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-router";
 import { useState, useCallback } from "react";
-import { getCurrentUser } from "~/lib/auth";
-import { importMaterials } from "~/lib/materials";
 
 export const Route = createFileRoute("/import")({
   loader: async () => {
-    const { user } = await getCurrentUser();
+    const meRes = await fetch("http://localhost:3000/api/me"); const meData = await meRes.json(); const user = meData.user;
     if (!user) throw redirect({ to: "/login" });
     return { user };
   },
@@ -63,7 +61,7 @@ function ImportPage() {
         trade: row.trade || "",
         supplier: row.supplier || "",
       })).filter(i => i.name);
-      await importMaterials({ data: { items } });
+      await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "materials.importMaterials", args: { data: { rows: items } } }), credentials: "include" }).then(r => r.json());
       setDone(true);
     } catch (e) { /* ignore */ }
     finally { setUploading(false); }

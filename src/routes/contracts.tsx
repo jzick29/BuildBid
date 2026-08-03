@@ -1,6 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { listContracts, getExpiringContracts } from "~/lib/contracts";
 
 export const Route = createFileRoute("/contracts")({ component: ContractsPage });
 
@@ -20,8 +19,8 @@ function ContractsPage() {
         if (!meData.user) { window.location.href = "/login"; return; }
         setUser(meData.user);
         const [c, e] = await Promise.all([
-          listContracts().catch(() => []),
-          getExpiringContracts().catch(() => []),
+          fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "contracts.listContracts", args: {} }), credentials: "include" }).then(r => r.json()).catch(() => []),
+          fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "contracts.getExpiringContracts", args: {} }), credentials: "include" }).then(r => r.json()).catch(() => []),
         ]);
         setContracts(c); setExpiring(e);
       } catch (err: any) { setError(err.message); }

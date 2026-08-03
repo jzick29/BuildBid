@@ -1,6 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { getTeamMembers, inviteTeamMember, removeTeamMember } from "~/lib/team";
 
 export const Route = createFileRoute("/team")({ component: TeamPage });
 
@@ -19,7 +18,8 @@ function TeamPage() {
       const me = meData || await fetch("/api/me").then(r => r.json());
       if (!me.user) { window.location.href = "/login"; return; }
       setUser(me.user);
-      const t = await getTeamMembers();
+      const tRes = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "team.getTeamMembers", args: {} }), credentials: "include" });
+      const t = await tRes.json();
       setMembers(t);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
@@ -30,13 +30,13 @@ function TeamPage() {
   const handleInvite = async () => {
     if (!inviteEmail) return;
     setInviting(true);
-    try { await inviteTeamMember({ data: { email: inviteEmail, role: inviteRole } }); setInviteEmail(""); alert("Invite sent!"); }
+    try { await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "team.inviteTeamMember", args: { data: { email: inviteEmail, role: inviteRole } } }), credentials: "include" }); setInviteEmail(""); alert("Invite sent!"); }
     catch (e: any) { alert("Error: " + e.message); }
     finally { setInviting(false); }
   };
 
   const handleRemove = async (memberId: string) => {
-    try { await removeTeamMember({ data: { memberId } }); setMembers(members.filter(m => m.id !== memberId)); }
+    try { await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "team.removeTeamMember", args: { data: { memberId } } }), credentials: "include" }); setMembers(members.filter(m => m.id !== memberId)); }
     catch (e: any) { alert("Error: " + e.message); }
   };
 

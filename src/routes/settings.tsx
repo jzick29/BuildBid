@@ -1,8 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { getSubscriptionStatus } from "~/lib/subscriptions";
-import { saveSubscription, removeSubscription, getSubscriptions, getVapidPublicKey } from "~/lib/push";
-import { getConnectionUrl, getConnectedPlatforms, disconnectPlatform } from "~/lib/integrations";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
@@ -23,10 +20,11 @@ function SettingsPage() {
         const meData = await meRes.json();
         if (!meData.user) { window.location.href = "/login"; return; }
         setUser(meData.user);
+        const fetchApi = (fn: string, args: any = {}) => fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: fn, args }), credentials: "include" }).then(r => r.json());
         const [subData, pushData, platData] = await Promise.all([
-          getSubscriptionStatus().catch(() => ({ tier: "trial" })),
-          getSubscriptions().catch(() => []),
-          getConnectedPlatforms().catch(() => []),
+          fetchApi("subscriptions.getSubscriptionStatus").catch(() => ({ tier: "trial" })),
+          fetchApi("push.getSubscriptions").catch(() => []),
+          fetchApi("integrations.getConnectedPlatforms").catch(() => []),
         ]);
         setSub(subData);
         setPushSubs(pushData);
@@ -74,7 +72,7 @@ function SettingsPage() {
           <h2 className="text-lg font-semibold">Push Notifications</h2>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Get notified when proposals are viewed.</p>
           {pushSubs.length > 0 ? (
-            <div className="mt-4 space-y-2">{pushSubs.map((s: any) => <div key={s.id} className="flex items-center justify-between rounded-lg bg-gray-50 p-3 dark:bg-gray-950"><span className="text-sm truncate max-w-xs">{s.endpoint?.substring(0,60)}...</span><button onClick={() => removeSubscription({ data: { endpoint: s.endpoint } }).then(() => setPushSubs(pushSubs.filter(x => x.endpoint !== s.endpoint)))} className="text-sm text-red-600 hover:underline">Remove</button></div>)}</div>
+            <div className="mt-4 space-y-2">{pushSubs.map((s: any) => <div key={s.id} className="flex items-center justify-between rounded-lg bg-gray-50 p-3 dark:bg-gray-950"><span className="text-sm truncate max-w-xs">{s.endpoint?.substring(0,60)}...</span><button onClick={() => fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "push.removeSubscription", args: { data: { endpoint: s.endpoint } } }), credentials: "include" }).then(() => setPushSubs(pushSubs.filter(x => x.endpoint !== s.endpoint)))} className="text-sm text-red-600 hover:underline">Remove</button></div>)}</div>
           ) : <p className="mt-4 text-sm text-gray-400">No push subscriptions</p>}
         </section>
 
@@ -82,9 +80,9 @@ function SettingsPage() {
           <h2 className="text-lg font-semibold">Builder Integrations</h2>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Connect to Buildertrend, CoConstruct, or Procore.</p>
           {builderPlatforms.length > 0 ? (
-            <div className="mt-4 space-y-2">{builderPlatforms.map((p: any) => <div key={p.id} className="flex items-center justify-between rounded-lg bg-gray-50 p-3 dark:bg-gray-950"><span className="text-sm font-medium capitalize">{p.platform}</span><button onClick={() => disconnectPlatform({ data: { id: p.id } }).then(() => setBuilderPlatforms(builderPlatforms.filter(x => x.id !== p.id)))} className="text-sm text-red-600 hover:underline">Disconnect</button></div>)}</div>
+            <div className="mt-4 space-y-2">{builderPlatforms.map((p: any) => <div key={p.id} className="flex items-center justify-between rounded-lg bg-gray-50 p-3 dark:bg-gray-950"><span className="text-sm font-medium capitalize">{p.platform}</span><button onClick={() => fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "integrations.disconnectPlatform", args: { data: { platform: p.platform } } }), credentials: "include" }).then(() => setBuilderPlatforms(builderPlatforms.filter(x => x.platform !== p.platform)))} className="text-sm text-red-600 hover:underline">Disconnect</button></div>)}</div>
           ) : <p className="mt-4 text-sm text-gray-400">No integrations connected</p>}
-          <button onClick={async () => { const url = await getConnectionUrl({ data: { platform: "buildertrend" } }); if (url) window.open(url, "_blank"); }} className="mt-4 rounded-lg border border-indigo-300 px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950">+ Connect Builder Platform</button>
+          <button onClick={async () => { const res = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "integrations.getConnectionUrl", args: { data: { platform: "buildertrend" } } }), credentials: "include" }); const data = await res.json(); if (data.url) window.open(data.url, "_blank"); }} className="mt-4 rounded-lg border border-indigo-300 px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950">+ Connect Builder Platform</button>
         </section>
       </main>
     </div>

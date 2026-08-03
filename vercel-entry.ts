@@ -198,6 +198,321 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             )).rows;
             break;
           }
+          // === team ===
+          case "team.getTeamMembers": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const memR = await pool.query("SELECT owner_id FROM team_members WHERE user_id = $1", [userId]);
+            const ownerId = memR.rows[0]?.owner_id || userId;
+            const members = (await pool.query("SELECT tm.*, u.email, u.name FROM team_members tm JOIN users u ON u.id = tm.user_id WHERE tm.owner_id = $1", [ownerId])).rows;
+            const invites = (await pool.query("SELECT * FROM team_invites WHERE owner_id = $1 AND expires_at > NOW()", [ownerId])).rows;
+            result = { members, invites, ownerId, isOwner: ownerId === userId };
+            break;
+          }
+          case "team.inviteTeamMember": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const d = args?.data || {};
+            const ur = await pool.query("SELECT subscription_tier FROM users WHERE id = $1", [userId]);
+            const tier = ur.rows[0]?.subscription_tier || "trial";
+            const cntR = await pool.query("SELECT COUNT(*) as cnt FROM team_members WHERE owner_id = $1", [userId]);
+            const maxMembers = tier === "shop" ? 999 : tier === "pro" ? 5 : 0;
+            if (tier === "trial" || tier === "starter" || parseInt(cntR.rows[0].cnt) >= maxMembers) { res.statusCode = 400; res.end(JSON.stringify({ error: "Team features require Pro or Shop plan" })); return; }
+            const token = crypto.randomUUID();
+            await pool.query("INSERT INTO team_invites (id, owner_id, email, role, token, expires_at) VALUES ($1,$2,$3,$4,$5,$6)", [crypto.randomUUID(), userId, d.email, d.role || "member", token, new Date(Date.now() + 7*86400000).toISOString()]);
+            result = { token, inviteUrl: "/api/accept-invite?token=" + token };
+            break;
+          }
+          case "team.removeTeamMember": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const d2 = args?.data || {};
+            const mR = await pool.query("SELECT * FROM team_members WHERE id = $1", [d2.memberId]);
+            if (!mR.rows[0]) { res.statusCode = 404; res.end(JSON.stringify({ error: "Member not found" })); return; }
+            if (mR.rows[0].owner_id !== userId) { res.statusCode = 403; res.end(JSON.stringify({ error: "Not your team" })); return; }
+            await pool.query("DELETE FROM team_members WHERE id = $1", [d2.memberId]);
+            result = { success: true };
+            break;
+          }
+          // === admin ===
+          case "admin.listUsers": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const adminCheck = await pool.query("SELECT role FROM users WHERE id = $1", [userId]);
+            if (adminCheck.rows[0]?.role !== "admin") { res.statusCode = 403; res.end(JSON.stringify({ error: "Admin required" })); return; }
+            const rows = (await pool.query("SELECT u.id, u.email, u.name, u.subscription_tier, u.trial_ends_at, u.created_at, u.role, u.frozen, (SELECT COUNT(*) FROM estimates e WHERE e.user_id = u.id) as estimate_count FROM users u ORDER BY u.created_at DESC")).rows;
+            result = { users: rows, stats: { total: rows.length, activeTrials: rows.filter((r:any)=>r.subscription_tier==="trial"&&r.frozen===0).length, paying: rows.filter((r:any)=>["starter","pro","shop"].includes(r.subscription_tier)).length, frozen: rows.filter((r:any)=>r.frozen===1).length } };
+            break;
+          }
+          case "admin.setUserPlan": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const ac2 = await pool.query("SELECT role FROM users WHERE id = $1", [userId]);
+            if (ac2.rows[0]?.role !== "admin") { res.statusCode = 403; res.end(JSON.stringify({ error: "Admin required" })); return; }
+            const d3 = args?.data || {};
+            if (!d3.userId || !["trial","free","starter","pro","shop"].includes(d3.tier)) { res.statusCode = 400; res.end(JSON.stringify({ error: "Invalid" })); return; }
+            await pool.query("UPDATE users SET subscription_tier = $1 WHERE id = $2", [d3.tier, d3.userId]);
+            result = { success: true };
+            break;
+          }
+          case "admin.toggleUserFrozen": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const ac3 = await pool.query("SELECT role FROM users WHERE id = $1", [userId]);
+            if (ac3.rows[0]?.role !== "admin") { res.statusCode = 403; res.end(JSON.stringify({ error: "Admin required" })); return; }
+            const d4 = args?.data || {};
+            if (d4.userId === userId) { res.statusCode = 400; res.end(JSON.stringify({ error: "Cannot freeze yourself" })); return; }
+            const uR = await pool.query("SELECT frozen FROM users WHERE id = $1", [d4.userId]);
+            if (!uR.rows[0]) { res.statusCode = 404; res.end(JSON.stringify({ error: "User not found" })); return; }
+            const newFrozen = uR.rows[0].frozen === 1 ? 0 : 1;
+            await pool.query("UPDATE users SET frozen = $1 WHERE id = $2", [newFrozen, d4.userId]);
+            await pool.query("DELETE FROM sessions WHERE user_id = $1", [d4.userId]);
+            result = { success: true, frozen: newFrozen === 1 };
+            break;
+          }
+          case "admin.deleteUser": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const ac4 = await pool.query("SELECT role FROM users WHERE id = $1", [userId]);
+            if (ac4.rows[0]?.role !== "admin") { res.statusCode = 403; res.end(JSON.stringify({ error: "Admin required" })); return; }
+            const d5 = args?.data || {};
+            if (d5.userId === userId) { res.statusCode = 400; res.end(JSON.stringify({ error: "Cannot delete yourself" })); return; }
+            await pool.query("DELETE FROM users WHERE id = $1", [d5.userId]);
+            result = { success: true };
+            break;
+          }
+          // === push ===
+          case "push.getVapidPublicKey": {
+            result = { publicKey: process.env.VAPID_PUBLIC_KEY || "BHrL8vZC7MqK0vX4N9pW2yF3jR6tS1aD5cE8gH0kJ3mY7bU4wX9zA2nP6qV1lO5s" };
+            break;
+          }
+          case "push.saveSubscription": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const d6 = args?.data || {};
+            const existS = await pool.query("SELECT id FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2", [userId, d6.endpoint]);
+            if (existS.rows[0]) { await pool.query("UPDATE push_subscriptions SET p256dh_key = $1, auth_key = $2, updated_at = NOW() WHERE id = $3", [d6.keys?.p256dh || "", d6.keys?.auth || "", existS.rows[0].id]); }
+            else { await pool.query("INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh_key, auth_key) VALUES ($1,$2,$3,$4,$5)", [crypto.randomUUID(), userId, d6.endpoint, d6.keys?.p256dh || "", d6.keys?.auth || ""]); }
+            result = { success: true };
+            break;
+          }
+          case "push.removeSubscription": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            await pool.query("DELETE FROM push_subscriptions WHERE user_id = $1 AND endpoint = $2", [userId, (args?.data || {}).endpoint]);
+            result = { success: true };
+            break;
+          }
+          case "push.getSubscriptions": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = (await pool.query("SELECT * FROM push_subscriptions WHERE user_id = $1", [userId])).rows;
+            break;
+          }
+          // === integrations ===
+          case "integrations.getConnectionUrl": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const d7 = args?.data || {};
+            const platforms: Record<string,{authUrl:string}> = { buildertrend:{authUrl:"https://buildertrend.com/oauth2/authorize"}, coconstruct:{authUrl:"https://api.coconstruct.com/oauth/authorize"}, procore:{authUrl:"https://login.procore.com/oauth/authorize"} };
+            const p = platforms[d7.platform];
+            if (!p) { res.statusCode = 400; res.end(JSON.stringify({ error: "Unknown platform" })); return; }
+            const clientId = process.env[(d7.platform.toUpperCase())+"_CLIENT_ID"];
+            if (!clientId) { res.statusCode = 500; res.end(JSON.stringify({ error: "Not configured" })); return; }
+            const redir = (process.env.APP_URL || "https://site-delta-seven-64.vercel.app") + "/api/builder-auth?platform=" + d7.platform;
+            result = { url: p.authUrl + "?client_id=" + clientId + "&redirect_uri=" + encodeURIComponent(redir) + "&response_type=code&state=" + userId + "&scope=read%20write" };
+            break;
+          }
+          case "integrations.getConnectedPlatforms": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = (await pool.query("SELECT platform, expires_at, created_at FROM builder_integrations WHERE user_id = $1", [userId])).rows.map((r:any)=>({ platform: r.platform, name: r.platform, connectedAt: r.created_at, expiresAt: r.expires_at }));
+            break;
+          }
+          case "integrations.disconnectPlatform": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            await pool.query("DELETE FROM builder_integrations WHERE user_id = $1 AND platform = $2", [userId, (args?.data||{}).platform]);
+            result = { success: true };
+            break;
+          }
+          // === change orders ===
+          case "changeOrders.listAllChangeOrders": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = (await pool.query("SELECT co.*, e.project_name, e.customer_name FROM change_orders co JOIN estimates e ON e.id = co.estimate_id WHERE e.user_id = $1 ORDER BY co.created_at DESC", [userId])).rows;
+            break;
+          }
+          case "changeOrders.getPublicChangeOrder": {
+            const d8 = args?.data || {};
+            const co = (await pool.query("SELECT co.*, e.project_name, e.customer_name FROM change_orders co JOIN estimates e ON e.id = co.estimate_id WHERE co.id = $1", [d8.id])).rows[0];
+            if (!co) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; }
+            result = co;
+            break;
+          }
+          case "changeOrders.approveChangeOrder": {
+            const d9 = args?.data || {};
+            await pool.query("UPDATE change_orders SET status = 'approved', approved_at = NOW() WHERE id = $1", [d9.id]);
+            result = { success: true };
+            break;
+          }
+          // === materials ===
+          case "materials.listMaterials": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = (await pool.query("SELECT * FROM materials WHERE user_id = $1 ORDER BY name", [userId])).rows;
+            break;
+          }
+          case "materials.importMaterials": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const d10 = args?.data || {};
+            const rows2 = d10.rows || [];
+            let imported = 0;
+            for (const r of rows2) {
+              await pool.query("INSERT INTO materials (id, user_id, name, unit, unit_cost, category, supplier) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING", [crypto.randomUUID(), userId, r.name || "", r.unit || "ea", parseFloat(r.unit_cost) || 0, r.category || "", r.supplier || ""]);
+              imported++;
+            }
+            result = { imported, total: rows2.length };
+            break;
+          }
+          case "materials.getPublicEstimate": {
+            const d11 = args?.data || {};
+            const est = (await pool.query("SELECT * FROM estimates WHERE id = $1", [d11.id])).rows[0];
+            if (!est) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; }
+            const items = (await pool.query("SELECT * FROM line_items WHERE estimate_id = $1 ORDER BY sort_order", [d11.id])).rows;
+            result = { estimate: est, items };
+            break;
+          }
+          case "materials.savePublicSignature": {
+            const d12 = args?.data || {};
+            await pool.query("UPDATE estimates SET signature_data = $1, status = 'signed', signed_at = NOW() WHERE id = $2", [d12.signature || "", d12.estimateId]);
+            result = { success: true };
+            break;
+          }
+          // === invoices ===
+          case "invoices.listInvoices": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = (await pool.query("SELECT i.*, e.project_name, e.customer_name FROM invoices i JOIN estimates e ON e.id = i.estimate_id WHERE i.user_id = $1 ORDER BY i.created_at DESC", [userId])).rows;
+            break;
+          }
+          case "invoices.getInvoice": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const d13 = args?.data || {};
+            const inv = (await pool.query("SELECT i.*, e.project_name, e.customer_name FROM invoices i JOIN estimates e ON e.id = i.estimate_id WHERE i.id = $1 AND i.user_id = $2", [d13.id, userId])).rows[0];
+            if (!inv) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; }
+            result = inv;
+            break;
+          }
+          case "invoices.updateInvoiceStatus": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const d14 = args?.data || {};
+            await pool.query("UPDATE invoices SET status = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3", [d14.status, d14.id, userId]);
+            result = { success: true };
+            break;
+          }
+          // === customers ===
+          case "customers.getCustomerList": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = (await pool.query("SELECT DISTINCT ON (customer_name) customer_name, id, project_name, trade, status, created_at FROM estimates WHERE user_id = $1 AND customer_name != '' ORDER BY customer_name, created_at DESC", [userId])).rows;
+            break;
+          }
+          // === contracts ===
+          case "contracts.listContracts": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = (await pool.query("SELECT * FROM contracts WHERE user_id = $1 ORDER BY created_at DESC", [userId])).rows;
+            break;
+          }
+          case "contracts.getContract": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const d15 = args?.data || {};
+            const ct = (await pool.query("SELECT * FROM contracts WHERE id = $1 AND user_id = $2", [d15.id, userId])).rows[0];
+            if (!ct) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; }
+            const visits = (await pool.query("SELECT * FROM contract_visits WHERE contract_id = $1 ORDER BY scheduled_date", [d15.id])).rows;
+            result = { contract: ct, visits };
+            break;
+          }
+          case "contracts.generateNextVisit": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const d16 = args?.data || {};
+            const lastV = (await pool.query("SELECT scheduled_date FROM contract_visits WHERE contract_id = $1 ORDER BY scheduled_date DESC LIMIT 1", [d16.contractId])).rows[0];
+            const base = lastV?.scheduled_date ? new Date(lastV.scheduled_date) : new Date();
+            const nd = new Date(base.getTime() + 30*86400000).toISOString().split("T")[0];
+            const vid = crypto.randomUUID();
+            await pool.query("INSERT INTO contract_visits (id, contract_id, scheduled_date) VALUES ($1,$2,$3)", [vid, d16.contractId, nd]);
+            result = { nextVisitDate: nd, visitId: vid };
+            break;
+          }
+          case "contracts.completeVisit": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const d17 = args?.data || {};
+            await pool.query("UPDATE contract_visits SET status = 'completed', notes = $1, completed_at = NOW() WHERE id = $2", [d17.notes || "", d17.visitId]);
+            result = { success: true };
+            break;
+          }
+          case "contracts.updateContractStatus": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const d18 = args?.data || {};
+            await pool.query("UPDATE contracts SET status = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3", [d18.status, d18.id, userId]);
+            result = { success: true };
+            break;
+          }
+          case "contracts.getExpiringContracts": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = (await pool.query("SELECT * FROM contracts WHERE user_id = $1 AND status = 'active' AND end_date != '' AND end_date <= CURRENT_DATE + INTERVAL '30 days' ORDER BY end_date", [userId])).rows;
+            break;
+          }
+          // === email automations ===
+          case "emailAutomations.getAutomations": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const types = ["proposal_followup", "won_thankyou", "invoice_reminder"];
+            const out: any = {};
+            for (const type of types) {
+              const r2 = await pool.query("SELECT * FROM email_automations WHERE user_id = $1 AND type = $2", [userId, type]);
+              out[type] = r2.rows[0] || { enabled: true, template: "", type };
+            }
+            result = out;
+            break;
+          }
+          case "emailAutomations.saveAutomation": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const d19 = args?.data || {};
+            const exist2 = await pool.query("SELECT id FROM email_automations WHERE user_id = $1 AND type = $2", [userId, d19.type]);
+            if (exist2.rows[0]) { await pool.query("UPDATE email_automations SET enabled = $1, template = $2 WHERE id = $3", [d19.enabled ? 1 : 0, d19.template || "", exist2.rows[0].id]); }
+            else { await pool.query("INSERT INTO email_automations (id, user_id, type, enabled, template) VALUES ($1,$2,$3,$4,$5)", [crypto.randomUUID(), userId, d19.type, d19.enabled ? 1 : 0, d19.template || ""]); }
+            result = { success: true };
+            break;
+          }
+          case "emailAutomations.checkAutomations": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const triggers: any[] = [];
+            const unopened = (await pool.query("SELECT e.id, e.project_name, e.customer_name FROM estimates e LEFT JOIN proposal_views pv ON pv.estimate_id = e.id WHERE e.user_id = $1 AND e.status = 'sent' AND e.created_at < NOW() - INTERVAL '3 days' AND pv.id IS NULL", [userId])).rows;
+            for (const e of unopened) { const lr = await pool.query("SELECT id FROM automation_logs WHERE user_id = $1 AND type = 'proposal_followup' AND estimate_id = $2", [userId, e.id]); if (!lr.rows[0]) { await pool.query("INSERT INTO automation_logs (id, user_id, type, estimate_id) VALUES ($1,$2,$3,$4)", [crypto.randomUUID(), userId, "proposal_followup", e.id]); triggers.push({ type: "proposal_followup", estimateId: e.id, projectName: e.project_name, customerName: e.customer_name }); } }
+            result = { triggers };
+            break;
+          }
+          // === payments ===
+          case "payments.createPaymentLink": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const d20 = args?.data || {};
+            const stripeKey = process.env.STRIPE_SECRET_KEY;
+            if (!stripeKey) { res.statusCode = 500; res.end(JSON.stringify({ error: "Stripe not configured" })); return; }
+            const amountCents = Math.round((d20.amount || 0) * 100);
+            const resp = await fetch("https://api.stripe.com/v1/payment_links", { method: "POST", headers: { Authorization: "Bearer " + stripeKey, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ "line_items[0][price_data][currency]": "usd", "line_items[0][price_data][product_data][name]": d20.description || "Invoice", "line_items[0][price_data][unit_amount]": String(amountCents), "line_items[0][quantity]": "1", "after_completion[type]": "redirect", "after_completion[redirect][url]": (process.env.APP_URL||"")+"/api/payment-confirm?invoice_id="+d20.invoiceId, "metadata[invoice_id]": d20.invoiceId, "metadata[user_id]": userId }) });
+            const json = await resp.json() as any;
+            if (!resp.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: json.error?.message || "Stripe error" })); return; }
+            await pool.query("UPDATE invoices SET pdf_data = CASE WHEN pdf_data IS NULL OR pdf_data = '' THEN $1 ELSE pdf_data END WHERE id = $2", [json.id, d20.invoiceId]);
+            result = { url: json.url, id: json.id };
+            break;
+          }
+          case "payments.createDepositLink": {
+            const d21 = args?.data || {};
+            const stripeKey2 = process.env.STRIPE_SECRET_KEY;
+            if (!stripeKey2) { res.statusCode = 500; res.end(JSON.stringify({ error: "Stripe not configured" })); return; }
+            const amountCents2 = Math.round((d21.amount || 0) * 100);
+            const resp2 = await fetch("https://api.stripe.com/v1/payment_links", { method: "POST", headers: { Authorization: "Bearer " + stripeKey2, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ "line_items[0][price_data][currency]": "usd", "line_items[0][price_data][product_data][name]": d21.description || "Deposit", "line_items[0][price_data][unit_amount]": String(amountCents2), "line_items[0][quantity]": "1", "after_completion[type]": "redirect", "after_completion[redirect][url]": (process.env.APP_URL||"")+"/api/payment-confirm?estimate_id="+d21.estimateId+"&type=deposit", "metadata[estimate_id]": d21.estimateId, "metadata[type]": "deposit" }) });
+            const json2 = await resp2.json() as any;
+            if (!resp2.ok) { res.statusCode = 500; res.end(JSON.stringify({ error: json2.error?.message || "Stripe error" })); return; }
+            result = { url: json2.url, id: json2.id };
+            break;
+          }
+          // === subscriptions ===
+          case "subscriptions.getStripeLink": {
+            const d22 = args?.data || {};
+            const links: Record<string,string> = { starter: "https://buy.stripe.com/dRmaEZ7ej5np8B8g5t57W0o", pro: "https://buy.stripe.com/8x29AVgOT4jl04C5qP57W0o", shop: "https://buy.stripe.com/7sYcN7fKPg23cRo8D157W0q" };
+            result = { url: links[d22.plan] || links.starter };
+            break;
+          }
+          case "subscriptions.getPlanPrices": {
+            const d23 = args?.data || {};
+            const prices: Record<string,{monthly:number;annual:number}> = { starter: { monthly: 49, annual: 39 }, pro: { monthly: 99, annual: 79 }, shop: { monthly: 199, annual: 159 } };
+            result = prices[d23.plan] || prices.starter;
+            break;
+          }
           default: { res.statusCode = 501; res.end(JSON.stringify({ error: "Unknown: " + fnName })); return; }
         }
         res.statusCode = 200; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(result));

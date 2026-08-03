@@ -1,14 +1,11 @@
 import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { getCurrentUser } from "~/lib/auth";
-import { getInvoice, updateInvoiceStatus } from "~/lib/invoices";
-import { createPaymentLink } from "~/lib/payments";
 
 export const Route = createFileRoute("/invoices/$id")({
   loader: async ({ params }) => {
-    const { user } = await getCurrentUser();
+    const meRes = await fetch("http://localhost:3000/api/me"); const meData = await meRes.json(); const user = meData.user;
     if (!user) throw redirect({ to: "/login" });
-    const data = await getInvoice({ data: { id: params.id } });
+    const data = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "invoices.getInvoice", args: { data: { id: params.id } } }), credentials: "include" }).then(r => r.json());
     return { user, ...data };
   },
   component: InvoiceDetail,
@@ -22,20 +19,14 @@ function InvoiceDetail() {
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
 
   const handleStatus = async (status: string) => {
-    await updateInvoiceStatus({ data: { id: invoice.id, status } });
+    await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "invoices.updateInvoiceStatus", args: { data: { id: invoice.id, status } } }), credentials: "include" });
     router.invalidate();
   };
 
   const handlePayNow = async () => {
     setCreatingPayment(true);
     try {
-      const result = await createPaymentLink({
-        data: {
-          invoiceId: invoice.id,
-          amount: total,
-          description: `Invoice #${invoice.invoice_number} — ${invoice.project_name}`,
-        },
-      });
+      const result = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "payments.createPaymentLink", args: { data: { invoiceId: invoice.id, amount: total, description: `Invoice #${invoice.invoice_number} — ${invoice.project_name}` } } }), credentials: "include" }).then(r => r.json());
       setPaymentUrl(result.url);
       window.open(result.url, "_blank");
     } catch (e: any) {

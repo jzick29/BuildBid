@@ -1,12 +1,10 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { getCurrentUser } from "~/lib/auth";
-import { getCustomerList } from "~/lib/customers";
 
 export const Route = createFileRoute("/customers")({
   loader: async () => {
-    const { user } = await getCurrentUser();
+    const meRes = await fetch("http://localhost:3000/api/me"); const meData = await meRes.json(); const user = meData.user;
     if (!user) throw redirect({ to: "/login" });
-    const customers = await getCustomerList();
+    const customers = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "customers.getCustomerList", args: {} }), credentials: "include" }).then(r => r.json());
     return { user, customers };
   },
   component: CustomersPage,
