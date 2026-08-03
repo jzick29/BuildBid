@@ -12,6 +12,13 @@ function InvoicesPage() {
   const [error, setError] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
 
+  // Search
+  const [search, setSearch] = useState("");
+
+  // Month/Year filter
+  const [filterYear, setFilterYear] = useState("All");
+  const [filterMonth, setFilterMonth] = useState("All");
+
   // Create invoice modal
   const [showCreate, setShowCreate] = useState(false);
   const [selectedEstimate, setSelectedEstimate] = useState("");
@@ -71,10 +78,66 @@ function InvoicesPage() {
     }
   };
 
+  // Available years from invoice data
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    invoices.forEach((inv: any) => {
+      if (inv.created_at) {
+        years.add(new Date(inv.created_at).getFullYear().toString());
+      }
+    });
+    return Array.from(years).sort().reverse();
+  }, [invoices]);
+
+  const months = [
+    { value: "0", label: "January" }, { value: "1", label: "February" }, { value: "2", label: "March" },
+    { value: "3", label: "April" }, { value: "4", label: "May" }, { value: "5", label: "June" },
+    { value: "6", label: "July" }, { value: "7", label: "August" }, { value: "8", label: "September" },
+    { value: "9", label: "October" }, { value: "10", label: "November" }, { value: "11", label: "December" },
+  ];
+
   const filteredInvoices = useMemo(() => {
-    if (filterStatus === "All") return invoices;
-    return invoices.filter((inv: any) => inv.status === filterStatus.toLowerCase());
-  }, [invoices, filterStatus]);
+    let result = invoices;
+
+    // Status filter
+    if (filterStatus !== "All") {
+      result = result.filter((inv: any) => inv.status === filterStatus.toLowerCase());
+    }
+
+    // Search filter
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((inv: any) =>
+        (inv.invoice_number && inv.invoice_number.toLowerCase().includes(q)) ||
+        (inv.project_name && inv.project_name.toLowerCase().includes(q)) ||
+        (inv.customer_name && inv.customer_name.toLowerCase().includes(q))
+      );
+    }
+
+    // Month filter
+    if (filterMonth !== "All") {
+      const m = parseInt(filterMonth);
+      result = result.filter((inv: any) => {
+        if (!inv.created_at) return false;
+        return new Date(inv.created_at).getMonth() === m;
+      });
+    }
+
+    // Year filter
+    if (filterYear !== "All") {
+      result = result.filter((inv: any) => {
+        if (!inv.created_at) return false;
+        return new Date(inv.created_at).getFullYear().toString() === filterYear;
+      });
+    }
+
+    // Sort by date descending
+    result = [...result].sort((a: any, b: any) => {
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    });
+
+    return result;
+  }, [invoices, filterStatus, search, filterMonth, filterYear]);
 
   const totalSum = filteredInvoices.reduce((s: number, inv: any) => s + (parseFloat(inv.total) || 0), 0);
 
@@ -125,6 +188,53 @@ function InvoicesPage() {
               </button>
             );
           })}
+        </div>
+
+        {/* Search & date filters */}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            <input
+              type="text"
+              placeholder="Search invoices..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 pl-10 pr-4 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+            />
+            {search && (
+              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            )}
+          </div>
+          <select
+            value={filterMonth}
+            onChange={e => setFilterMonth(e.target.value)}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          >
+            <option value="All">All Months</option>
+            {months.map(m => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+          <select
+            value={filterYear}
+            onChange={e => setFilterYear(e.target.value)}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          >
+            <option value="All">All Years</option>
+            {availableYears.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+          {(search || filterMonth !== "All" || filterYear !== "All") && (
+            <button
+              onClick={() => { setSearch(""); setFilterMonth("All"); setFilterYear("All"); }}
+              className="text-xs text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
 
         {filteredInvoices.length === 0 ? (
