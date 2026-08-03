@@ -1,6 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { login } from "~/lib/auth";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -18,9 +17,16 @@ function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const result = await login({ data: { email, password } });
-      if (result.success) {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (data.success) {
         router.navigate({ to: "/dashboard" });
+      } else {
+        setError(data.error || "Login failed");
       }
     } catch (err: any) {
       setError(err.message || "Login failed");

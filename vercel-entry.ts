@@ -2,6 +2,7 @@
 // Static SSR import + inline auth & /api/call handlers
 import type { IncomingMessage, ServerResponse } from "node:http";
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 import { Pool } from "@neondatabase/serverless";
 import handler from "./dist/server/server.js";
 
@@ -28,8 +29,13 @@ async function handleSignup(body: any) {
   const exist = await pool.query("SELECT id FROM users WHERE email=$1", [email]);
   if (exist.rows[0]) return new Response(JSON.stringify({ error: "Email in use" }), { status: 409, headers: { "Content-Type": "application/json" } });
   const id = crypto.randomUUID();
-  const hash = crypto.createHash("sha256").update(password).digest("hex");
-  await pool.query("INSERT INTO users (id, email, password_hash, name) VALUES ($1,$2,$3,$4)", [id, email, hash, name || ""]);
+  const hash = bcrypt.hashSync(password, 10);
+  const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  // First user is admin
+  const users = await pool.query("SELECT COUNT(*) as c FROM users");
+  const role = parseInt(users.rows[0]?.c || "0") === 0 ? "admin" : "user";
+  await pool.query("INSERT INTO users (id, email, password_hash, name, subscription_tier, trial_ends_at, role) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+    [id, email, hash, name || "", "trial", trialEndsAt, role]);
   const token = crypto.randomUUID();
   await pool.query("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1,$2,$3)", [token, id, new Date(Date.now() + 7 * 86400000).toISOString()]);
   const resp = new Response(JSON.stringify({ success: true, user: { id, email, name } }), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -40,9 +46,9 @@ async function handleLogin(body: any) {
   const { email, password } = body || {};
   if (!email || !password) return new Response(JSON.stringify({ error: "Missing fields" }), { status: 400, headers: { "Content-Type": "application/json" } });
   const pool = getPool();
-  const hash = crypto.createHash("sha256").update(password).digest("hex");
-  const r = await pool.query("SELECT id, email, name FROM users WHERE email=$1 AND password_hash=$2", [email, hash]);
+  const r = await pool.query("SELECT id, email, name, password_hash FROM users WHERE email=$1", [email]);
   if (!r.rows[0]) return new Response(JSON.stringify({ error: "Invalid credentials" }), { status: 401, headers: { "Content-Type": "application/json" } });
+  if (!bcrypt.compareSync(password, r.rows[0].password_hash)) return new Response(JSON.stringify({ error: "Invalid credentials" }), { status: 401, headers: { "Content-Type": "application/json" } });
   const token = crypto.randomUUID();
   await pool.query("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1,$2,$3)", [token, r.rows[0].id, new Date(Date.now() + 7 * 86400000).toISOString()]);
   const resp = new Response(JSON.stringify({ success: true, user: r.rows[0] }), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -85,6 +91,42 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
     if (req.method === "POST" && url === "/api/login") { const wr = await handleLogin(await readBody(req)); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
     if (req.method === "GET" && url === "/api/me") { const wr = await handleMe(req); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
     if (req.method === "POST" && url === "/api/logout") { const wr = await handleLogout(req); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
+    if (req.method === "POST" && url === "/api/seed-admin") {
+      const pool = getPool();
+      // Ensure schema exists
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, name TEXT NOT NULL DEFAULT '',
+          password_hash TEXT NOT NULL, subscription_tier TEXT NOT NULL DEFAULT 'trial',
+          trial_ends_at TEXT, stripe_customer_id TEXT, role TEXT NOT NULL DEFAULT 'user',
+          frozen INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC')
+        );
+        CREATE TABLE IF NOT EXISTS sessions (
+          id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC')
+        );
+        CREATE TABLE IF NOT EXISTS reset_tokens (
+          id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          token TEXT NOT NULL, expires_at TEXT NOT NULL
+        );
+      `);
+      await pool.query("DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email='admin@buildbid.pro')");
+      await pool.query("DELETE FROM users WHERE email='admin@buildbid.pro'");
+      const id = crypto.randomUUID();
+      const hash = bcrypt.hashSync("BuildBid2026!", 10);
+      const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+      await pool.query("INSERT INTO users (id, email, password_hash, name, subscription_tier, trial_ends_at, role) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+        [id, "admin@buildbid.pro", hash, "Admin", "trial", trialEndsAt, "admin"]);
+      res.statusCode = 200; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ success: true, email: "admin@buildbid.pro" }));
+      return;
+    }
+    // Pricing redirect
+    if (req.method === "GET" && url === "/pricing") { res.writeHead(302, { Location: "/#pricing" }); res.end(); return; }
+    // Privacy page
+    if (req.method === "GET" && url === "/privacy") { res.writeHead(200, { "Content-Type": "text/html" }); res.end(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Privacy Policy — BuildBid</title><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/assets/app-BJG-1l0U.css"></head><body class="bg-gray-50"><div class="max-w-2xl mx-auto px-6 py-16"><a href="/" class="text-indigo-600 font-bold">← Back to BuildBid</a><h1 class="text-3xl font-bold mt-6">Privacy Policy</h1><p class="mt-4 text-gray-600">Effective date: August 3, 2026</p><div class="mt-8 space-y-6 text-gray-700"><p>BuildBid ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how your personal information is collected, used, and disclosed by BuildBid.</p><h2 class="text-xl font-semibold mt-6">Information We Collect</h2><p>We collect information you provide directly to us, such as when you create an account: name, email address, and business information. We also collect usage data about how you interact with our platform.</p><h2 class="text-xl font-semibold mt-6">How We Use Information</h2><p>We use the information we collect to: provide and maintain our services; send you technical notices and support messages; respond to your comments and questions; and improve our platform.</p><h2 class="text-xl font-semibold mt-6">Data Sharing</h2><p>We do not sell your personal information. We may share information with third-party service providers who help us operate our platform (e.g., hosting, payment processing).</p><h2 class="text-xl font-semibold mt-6">Security</h2><p>We take reasonable measures to protect your personal information from loss, theft, misuse, and unauthorized access.</p><h2 class="text-xl font-semibold mt-6">Contact</h2><p>If you have questions about this Privacy Policy, please contact us at support@buildbid.pro.</p></div></div></body></html>`); return; }
+    // Terms page
+    if (req.method === "GET" && url === "/terms") { res.writeHead(200, { "Content-Type": "text/html" }); res.end(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Terms of Service — BuildBid</title><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/assets/app-BJG-1l0U.css"></head><body class="bg-gray-50"><div class="max-w-2xl mx-auto px-6 py-16"><a href="/" class="text-indigo-600 font-bold">← Back to BuildBid</a><h1 class="text-3xl font-bold mt-6">Terms of Service</h1><p class="mt-4 text-gray-600">Effective date: August 3, 2026</p><div class="mt-8 space-y-6 text-gray-700"><p>By accessing or using BuildBid ("the Service"), you agree to be bound by these Terms of Service.</p><h2 class="text-xl font-semibold mt-6">Account Terms</h2><p>You are responsible for maintaining the security of your account. You must provide accurate and complete information when creating an account. You may not use the Service for any illegal or unauthorized purpose.</p><h2 class="text-xl font-semibold mt-6">Subscription &amp; Billing</h2><p>BuildBid offers tiered subscription plans with monthly or annual billing. All fees are non-refundable except as required by law. We reserve the right to change pricing with 30 days' notice.</p><h2 class="text-xl font-semibold mt-6">Free Trial</h2><p>New users receive a 14-day free trial. No credit card is required to start the trial. At the end of the trial period, you must subscribe to a paid plan to continue using the Service.</p><h2 class="text-xl font-semibold mt-6">Limitation of Liability</h2><p>BuildBid is provided "as is" without warranty of any kind. We shall not be liable for any damages arising from the use of the Service.</p><h2 class="text-xl font-semibold mt-6">Contact</h2><p>Questions about these Terms? Contact us at support@buildbid.pro.</p></div></div></body></html>`); return; }
     // /api/call
     if (req.method === "POST" && url === "/api/call") {
       const body = await readBody(req);

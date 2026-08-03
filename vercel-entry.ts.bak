@@ -1,0 +1,203 @@
+// Vercel Build Output API function entry.
+//
+// Uses Neon Postgres directly for auth handlers that bypass broken TanStack RPC.
+// Bundled with its deps + the SSR handler's dynamic ./assets chunks into
+// .vercel/output/functions/render.func/index.js by build-vercel.sh.
+import type { IncomingMessage, ServerResponse } from "node:http";
+
+import handler from "./dist/server/server.js";
+import bcrypt from "bcryptjs";
+import { Pool } from "@neondatabase/serverless";
+
+const fetchHandler = handler as {
+  fetch: (request: Request) => Response | Promise<Response>;
+};
+
+// Lazy-init pool
+let _pool: Pool | null = null;
+function getPool(): Pool {
+  if (_pool) return _pool;
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL not set");
+  _pool = new Pool({ connectionString: url, max: 3 });
+  return _pool;
+}
+
+// Inline auth handlers — talk to Postgres directly
+async function handleSignup(body: any): Promise<Response> {
+  const { email, password, name } = body || {};
+  if (!email || !password) {
+    return new Response(JSON.stringify({ error: "Email and password are required" }), {
+      status: 400, headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (password.length < 6) {
+    return new Response(JSON.stringify({ error: "Password must be at least 6 characters" }), {
+      status: 400, headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const pool = getPool();
+  const id = crypto.randomUUID();
+  const passwordHash = bcrypt.hashSync(password, 10);
+  const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const normEmail = email.trim().toLowerCase();
+  const displayName = name?.trim() || email.split("@")[0];
+
+  // Determine role
+  const countResult = await pool.query("SELECT COUNT(*) as c FROM users");
+  const userCount = parseInt(countResult.rows[0].c);
+  const role = (!adminEmail && userCount === 0) || normEmail === adminEmail ? "admin" : "user";
+
+  await pool.query(
+    "INSERT INTO users (id, email, name, password_hash, subscription_tier, trial_ends_at, role) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+    [id, normEmail, displayName, passwordHash, "trial", trialEndsAt, role]
+  );
+
+  const token = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  await pool.query(
+    "INSERT INTO sessions (id, user_id, expires_at) VALUES ($1,$2,$3)",
+    [token, id, expiresAt]
+  );
+
+  const resp = new Response(JSON.stringify({
+    success: true,
+    user: { id, email: normEmail, name: displayName }
+  }), { status: 200, headers: { "Content-Type": "application/json" } });
+  resp.headers.append("Set-Cookie", `buildbid_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${7 * 24 * 60 * 60}`);
+  return resp;
+}
+
+async function handleLogin(body: any): Promise<Response> {
+  const { email, password } = body || {};
+  if (!email || !password) {
+    return new Response(JSON.stringify({ error: "Email and password are required" }), {
+      status: 400, headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const pool = getPool();
+  const result = await pool.query(
+    "SELECT id, email, name, password_hash, frozen FROM users WHERE email = $1",
+    [email.trim().toLowerCase()]
+  );
+  const row = result.rows[0];
+
+  if (!row) {
+    return new Response(JSON.stringify({ error: "Invalid email or password" }), {
+      status: 401, headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (row.frozen === 1) {
+    return new Response(JSON.stringify({ error: "This account has been suspended." }), {
+      status: 403, headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (!bcrypt.compareSync(password, row.password_hash)) {
+    return new Response(JSON.stringify({ error: "Invalid email or password" }), {
+      status: 401, headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const token = crypto.randomUUID();
+  await pool.query(
+    "INSERT INTO sessions (id, user_id, expires_at) VALUES ($1,$2,$3)",
+    [token, row.id, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]
+  );
+
+  const resp = new Response(JSON.stringify({
+    success: true,
+    user: { id: row.id, email: row.email, name: row.name }
+  }), { status: 200, headers: { "Content-Type": "application/json" } });
+  resp.headers.append("Set-Cookie", `buildbid_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${7 * 24 * 60 * 60}`);
+  return resp;
+}
+
+const toWebRequest = (req: IncomingMessage): Request => {
+  const host = req.headers.host ?? "localhost";
+  const proto =
+    (req.headers["x-forwarded-proto"] as string | undefined) ?? "https";
+  const url = `${proto}://${host}${req.url ?? "/"}`;
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (Array.isArray(value)) for (const v of value) headers.append(key, v);
+    else if (value != null) headers.set(key, value);
+  }
+  const method = req.method ?? "GET";
+  const hasBody = method !== "GET" && method !== "HEAD";
+  return new Request(url, {
+    method,
+    headers,
+    ...(hasBody
+      ? { body: req as unknown as ReadableStream, duplex: "half" }
+      : {}),
+  } as RequestInit);
+};
+
+export default async function vercelHandler(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  try {
+    const url = req.url ?? "/";
+
+    // Handle auth API routes directly (bypass TanStack RPC which is broken on Vercel)
+    if (req.method === "POST" && url === "/api/signup") {
+      const body = await readBody(req);
+      const webRes = await handleSignup(body);
+      res.statusCode = webRes.status;
+      webRes.headers.forEach((value, key) => res.setHeader(key, value));
+      if (webRes.body) {
+        const text = await webRes.text();
+        res.end(text);
+      } else {
+        res.end();
+      }
+      return;
+    }
+
+    if (req.method === "POST" && url === "/api/login") {
+      const body = await readBody(req);
+      const webRes = await handleLogin(body);
+      res.statusCode = webRes.status;
+      webRes.headers.forEach((value, key) => res.setHeader(key, value));
+      if (webRes.body) {
+        const text = await webRes.text();
+        res.end(text);
+      } else {
+        res.end();
+      }
+      return;
+    }
+
+    const webRes = await fetchHandler.fetch(toWebRequest(req));
+    res.statusCode = webRes.status;
+    webRes.headers.forEach((value, key) => res.setHeader(key, value));
+    if (webRes.body) {
+      const reader = webRes.body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(value);
+      }
+    }
+    res.end();
+  } catch (error) {
+    console.error("[team-site] SSR request failed", error);
+    res.statusCode = 500;
+    res.setHeader("content-type", "text/plain");
+    res.end("Internal Server Error");
+  }
+}
+
+async function readBody(req: IncomingMessage): Promise<any> {
+  return new Promise((resolve) => {
+    let data = "";
+    req.on("data", (chunk: string) => { data += chunk; });
+    req.on("end", () => {
+      try { resolve(JSON.parse(data)); } catch { resolve({}); }
+    });
+  });
+}

@@ -1,7 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { signup } from "~/lib/auth";
-import { sendWelcomeEmail } from "~/lib/email";
 
 export const Route = createFileRoute("/signup")({
   component: SignupPage,
@@ -20,13 +18,16 @@ function SignupPage() {
     setError("");
     setLoading(true);
     try {
-      const result = await signup({ data: { email, password, name } });
-      if (result.success) {
-        // Fire welcome email (non-blocking)
-        sendWelcomeEmail({ data: { email: result.user.email, name: result.user.name } }).catch(console.error);
-        // Track conversion
-        if (typeof window !== "undefined") (window as any).__buildbidTrack?.("signup");
+      const res = await fetch("/api/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, name }),
+      });
+      const data = await res.json();
+      if (data.success) {
         router.navigate({ to: "/dashboard" });
+      } else {
+        setError(data.error || "Signup failed");
       }
     } catch (err: any) {
       setError(err.message || "Signup failed");
