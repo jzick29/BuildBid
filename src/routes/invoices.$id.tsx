@@ -2,17 +2,11 @@ import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-rout
 import { useState } from "react";
 
 export const Route = createFileRoute("/invoices/$id")({
-  loader: async ({ params }) => {
-    const meRes = await fetch("http://localhost:3000/api/me"); const meData = await meRes.json(); const user = meData.user;
-    if (!user) throw redirect({ to: "/login" });
-    const data = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "invoices.getInvoice", args: { data: { id: params.id } } }), credentials: "include" }).then(r => r.json());
-    return { user, ...data };
-  },
+  loader: async () => ({}),
   component: InvoiceDetail,
 });
 
 function InvoiceDetail() {
-  const { user, invoice, items } = Route.useLoaderData();
   const router = useRouter();
   const total = Number(invoice.total);
   const [creatingPayment, setCreatingPayment] = useState(false);

@@ -2,11 +2,7 @@ import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-rout
 import { useState, useCallback } from "react";
 
 export const Route = createFileRoute("/import")({
-  loader: async () => {
-    const meRes = await fetch("http://localhost:3000/api/me"); const meData = await meRes.json(); const user = meData.user;
-    if (!user) throw redirect({ to: "/login" });
-    return { user };
-  },
+  loader: async () => ({}),
   component: ImportPage,
 });
 
@@ -18,7 +14,7 @@ const COLUMN_ALIASES: Record<string, string> = {
 
 function ImportPage() {
   const router = useRouter();
-  const { user } = Route.useLoaderData();
+
   const [preview, setPreview] = useState<any[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -69,15 +65,6 @@ function ImportPage() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="border-b border-gray-200 dark:border-gray-800">
-        <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link to="/dashboard" className="text-xl font-bold tracking-tight text-indigo-600 dark:text-indigo-400">BuildBid</Link>
-          <div className="flex items-center gap-4 text-sm">
-            <Link to="/dashboard" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">Dashboard</Link>
-            <Link to="/materials" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">Materials</Link>
-          </div>
-        </nav>
-      </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-12">
         <h1 className="text-3xl font-bold">Import Materials</h1>

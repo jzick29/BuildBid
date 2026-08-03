@@ -64,16 +64,6 @@ function SchedulePage() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="border-b border-gray-200 dark:border-gray-800">
-        <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link to="/dashboard" className="text-xl font-bold text-indigo-600 dark:text-indigo-400">BuildBid</Link>
-          <div className="flex items-center gap-6 text-sm">
-            <Link to="/dashboard" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">Dashboard</Link>
-            <Link to="/schedule" className="font-semibold text-indigo-600 dark:text-indigo-400">Schedule</Link>
-            <Link to="/pipeline" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">Pipeline</Link>
-          </div>
-        </nav>
-      </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-12">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Schedule</h1>

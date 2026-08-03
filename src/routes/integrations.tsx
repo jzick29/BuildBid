@@ -1,15 +1,10 @@
 import { useState, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { getConnectedPlatforms, disconnectPlatform, getConnectionUrl, importBidsFromPlatform } from "../lib/integrations";
+
 
 export const Route = createFileRoute("/integrations")({
   component: IntegrationsPage,
-  loader: async () => {
-    try {
-      const platforms = await getConnectedPlatforms();
-      return { platforms };
-    } catch { return { platforms: [] }; }
-  },
+  loader: async () => ({}),
 });
 
 const PLATFORM_META: Record<string, { name: string; logo: string; color: string }> = {
@@ -19,8 +14,21 @@ const PLATFORM_META: Record<string, { name: string; logo: string; color: string 
 };
 
 function IntegrationsPage() {
-  const { platforms } = Route.useLoaderData();
-  const [connected, setConnected] = useState(platforms);
+  if (loading) return <div className="flex min-h-dvh items-center justify-center"><p className="text-gray-500">Loading...</p></div>;
+  const [connected, setConnected] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/call", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ function: "integrations.getConnectedPlatforms", args: {} }),
+      credentials: "include",
+    })
+    .then(r => r.json())
+    .then(d => { if (Array.isArray(d)) setConnected(d); })
+    .catch(() => {})
+    .finally(() => setLoading(false));
+  }, []);
   const [importing, setImporting] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<string | null>(null);
   const [connecting, setConnecting] = useState<string | null>(null);
@@ -28,7 +36,8 @@ function IntegrationsPage() {
   const handleConnect = async (platform: string) => {
     setConnecting(platform);
     try {
-      const { url } = await getConnectionUrl({ data: { platform } });
+      const res = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "integrations.getConnectionUrl", args: { data: { platform } } }), credentials: "include" });
+      const { url } = await res.json();
       window.location.href = url;
     } catch (e: any) {
       alert(e.message);
@@ -39,7 +48,7 @@ function IntegrationsPage() {
   const handleDisconnect = async (platform: string) => {
     if (!confirm(`Disconnect ${PLATFORM_META[platform]?.name || platform}?`)) return;
     try {
-      await disconnectPlatform({ data: { platform } });
+      await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "integrations.disconnectPlatform", args: { data: { platform } } }), credentials: "include" });
       setConnected(connected.filter((p) => p.platform !== platform));
     } catch (e: any) {
       alert(e.message);
@@ -50,7 +59,8 @@ function IntegrationsPage() {
     setImporting(platform);
     setImportResult(null);
     try {
-      const result = await importBidsFromPlatform({ data: { platform } });
+      const resp = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "integrations.importBidsFromPlatform", args: { data: { platform } } }), credentials: "include" });
+      const result = await resp.json();
       setImportResult(`Imported ${result.imported} new bid${result.imported !== 1 ? "s" : ""} from ${result.total} total.`);
     } catch (e: any) {
       setImportResult(`Error: ${e.message}`);

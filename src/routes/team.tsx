@@ -46,16 +46,6 @@ function TeamPage() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="border-b border-gray-200 dark:border-gray-800">
-        <nav className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-          <Link to="/dashboard" className="text-xl font-bold tracking-tight text-indigo-600 dark:text-indigo-400">BuildBid</Link>
-          <div className="flex items-center gap-4 text-sm font-medium">
-            <Link to="/dashboard" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">Dashboard</Link>
-            <Link to="/team" className="font-semibold text-indigo-600 dark:text-indigo-400">Team</Link>
-            <span className="text-gray-600 dark:text-gray-400">{user.email}</span>
-          </div>
-        </nav>
-      </header>
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-12">
         <h1 className="text-3xl font-bold tracking-tight">Team</h1>
         <div className="mt-6 rounded-xl border border-gray-200 p-6 dark:border-gray-800">

@@ -25,15 +25,12 @@ const plans = [
 ];
 
 export const Route = createFileRoute("/subscribe")({
-  loader: async () => {
-    const meRes = await fetch("http://localhost:3000/api/me"); const meData = await meRes.json(); const result = { user: meData.user };
-    return { user: result.user };
-  },
+  loader: async () => ({}),
   component: PlansPage,
 });
 
 function PlansPage() {
-  const { user } = Route.useLoaderData();
+
   const currentTier = user?.subscriptionTier || "trial";
 
   return (

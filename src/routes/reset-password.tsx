@@ -1,23 +1,31 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
-import { validateResetToken, resetPassword } from "~/lib/auth";
+import { useState, useEffect } from "react";
 
 export const Route = createFileRoute("/reset-password")({
-  validateSearch: (search: Record<string, string>) => ({
-    token: search.token as string | undefined,
-  }),
-  loaderDeps: ({ search: { token } }) => ({ token }),
-  loader: async ({ deps: { token } }) => {
-    if (!token) return { valid: false, token: null };
-    const result = await validateResetToken({ data: { token } });
-    return { valid: result.valid, token };
-  },
+  loader: async () => ({}),
   component: ResetPasswordPage,
 });
 
 function ResetPasswordPage() {
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const t = sp.get("token");
+    if (!t) { setValid(false); setChecking(false); return; }
+    setToken(t);
+    fetch("/api/call", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ function: "auth.validateResetToken", args: { data: { token: t } } }),
+      credentials: "include",
+    })
+    .then(r => r.json())
+    .then(d => { setValid(d.valid); })
+    .catch(() => setValid(false))
+    .finally(() => setChecking(false));
+  }, []);
   const router = useRouter();
-  const { valid, token } = Route.useLoaderData();
+  const [valid, setValid] = useState<boolean | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
@@ -37,7 +45,7 @@ function ResetPasswordPage() {
     }
     setLoading(true);
     try {
-      await resetPassword({ data: { token: token!, password } });
+      await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "auth.resetPassword", args: { data: { token: token!, password } } }), credentials: "include" });
       setSuccess(true);
     } catch (err: any) {
       setError(err.message || "Failed to reset password");
@@ -46,6 +54,7 @@ function ResetPasswordPage() {
     }
   };
 
+  if (checking) return <div className="flex min-h-dvh items-center justify-center"><p className="text-gray-500">Loading...</p></div>;
   if (!valid) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-gray-50 px-6 dark:bg-gray-950">

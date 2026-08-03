@@ -1,6 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { logout } from "~/lib/auth";
 
 export const Route = createFileRoute("/logout")({
   component: LogoutPage,
@@ -10,7 +9,7 @@ function LogoutPage() {
   const router = useRouter();
 
   useEffect(() => {
-    logout().then(() => {
+    fetch("/api/logout", { method: "POST", credentials: "include" }).then(() => {
       router.navigate({ to: "/" });
     });
   }, [router]);

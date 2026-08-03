@@ -2,18 +2,11 @@ import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-rout
 import { useState, useEffect } from "react";
 
 export const Route = createFileRoute("/automation")({
-  loader: async () => {
-    const meRes = await fetch("http://localhost:3000/api/me"); const meData = await meRes.json(); const user = meData.user;
-    if (!user) throw redirect({ to: "/login" });
-    const automations = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "emailAutomations.getAutomations", args: {} }), credentials: "include" }).then(r => r.json());
-    const checks = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "emailAutomations.checkAutomations", args: {} }), credentials: "include" }).then(r => r.json());
-    return { user, automations, checks };
-  },
+  loader: async () => ({}),
   component: AutomationPage,
 });
 
 function AutomationPage() {
-  const { user, automations, checks } = Route.useLoaderData();
   const router = useRouter();
   const [forms, setForms] = useState<Record<string,{enabled:boolean;template:string}>>({});
   const [saving, setSaving] = useState("");
@@ -40,15 +33,6 @@ function AutomationPage() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="border-b border-gray-200 dark:border-gray-800">
-        <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link to="/dashboard" className="text-xl font-bold text-indigo-600 dark:text-indigo-400">BuildBid</Link>
-          <div className="flex items-center gap-6 text-sm">
-            <Link to="/dashboard" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">Dashboard</Link>
-            <Link to="/automation" className="font-semibold text-indigo-600 dark:text-indigo-400">Automation</Link>
-          </div>
-        </nav>
-      </header>
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-12">
         <h1 className="text-3xl font-bold">Email Automations</h1>

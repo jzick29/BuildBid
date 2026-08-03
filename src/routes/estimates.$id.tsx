@@ -1,15 +1,8 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
-import { getEstimate, addLineItem, removeLineItem, updateEstimateStatus, getCurrentUser } from "~/lib/estimates";
-import { logout } from "~/lib/auth";
+import { useState, useEffect } from "react";
 
 export const Route = createFileRoute("/estimates/$id")({
-  loader: async ({ params }) => {
-    const { user } = await getCurrentUser();
-    if (!user) throw new (await import("@tanstack/react-router")).redirect({ to: "/login" });
-    const data = await getEstimate({ data: { id: params.id } });
-    return { user, ...data };
-  },
+  loader: async () => ({}),
   component: EstimateDetail,
 });
 
@@ -17,25 +10,102 @@ const UNITS = ["each", "hour", "foot", "sqft", "lump"];
 
 function EstimateDetail() {
   const router = useRouter();
-  const { user, estimate, lineItems } = Route.useLoaderData();
-  const [desc, setDesc] = useState(""); const [qty, setQty] = useState("1");
-  const [unit, setUnit] = useState("each"); const [cost, setCost] = useState("0");
-  const [markup, setMarkup] = useState("0"); const [adding, setAdding] = useState(false);
-  const [items, setItems] = useState(lineItems); const [status, setStatus] = useState(estimate.status);
-  const handleLogout = async () => { await logout(); router.navigate({ to: "/" }); };
+  const [user, setUser] = useState<any>(null);
+  const [estimate, setEstimate] = useState<any>(null);
+  const [lineItems, setLineItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [desc, setDesc] = useState("");
+  const [qty, setQty] = useState("1");
+  const [unit, setUnit] = useState("each");
+  const [cost, setCost] = useState("0");
+  const [markup, setMarkup] = useState("0");
+  const [adding, setAdding] = useState(false);
+  const [status, setStatus] = useState("draft");
+
+  useEffect(() => {
+    const id = window.location.pathname.split("/").pop() || "";
+    (async () => {
+      try {
+        const meRes = await fetch("/api/me", { credentials: "include" });
+        const meData = await meRes.json();
+        if (!meData.user) { window.location.href = "/login"; return; }
+        setUser(meData.user);
+        const res = await fetch("/api/call", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ function: "estimates.getEstimate", args: { data: { id } } }),
+          credentials: "include",
+        });
+        const d = await res.json();
+        if (d?.estimate) {
+          setEstimate(d.estimate);
+          setLineItems(d.lineItems || []);
+          setStatus(d.estimate.status);
+        }
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const handleLogout = async () => {
+    await fetch("/api/logout", { method: "POST", credentials: "include" });
+    router.navigate({ to: "/" });
+  };
+
+  if (loading) return <div className="flex min-h-dvh items-center justify-center"><p className="text-gray-500">Loading...</p></div>;
+  if (error) return <div className="flex min-h-dvh items-center justify-center"><p className="text-red-500">Error: {error}</p></div>;
+  if (!user || !estimate) return null;
+
   const calcTotal = (item: any) => (item.quantity * item.unit_cost) * (1 + item.markup_percent / 100);
-  const subtotal = items.reduce((s: number, i: any) => s + i.quantity * i.unit_cost, 0);
-  const grandTotal = items.reduce((s: number, i: any) => s + calcTotal(i), 0);
+  const subtotal = lineItems.reduce((s: number, i: any) => s + i.quantity * i.unit_cost, 0);
+  const grandTotal = lineItems.reduce((s: number, i: any) => s + calcTotal(i), 0);
+
   const handleAddItem = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!desc.trim()) return; setAdding(true);
+    e.preventDefault();
+    if (!desc.trim()) return;
+    setAdding(true);
     try {
-      await addLineItem({ data: { estimateId: estimate.id, description: desc, quantity: parseFloat(qty) || 1, unit, unitCost: parseFloat(cost) || 0, markupPercent: parseFloat(markup) || 0 } });
+      await fetch("/api/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ function: "estimates.addLineItem", args: { data: { estimateId: estimate.id, description: desc, quantity: parseFloat(qty) || 1, unit, unitCost: parseFloat(cost) || 0, markupPercent: parseFloat(markup) || 0 } } }),
+        credentials: "include",
+      });
       setDesc(""); setQty("1"); setUnit("each"); setCost("0"); setMarkup("0");
-      const fresh = await getEstimate({ data: { id: estimate.id } }); setItems(fresh.lineItems);
+      const fres = await fetch("/api/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ function: "estimates.getEstimate", args: { data: { id: estimate.id } } }),
+        credentials: "include",
+      }).then(r => r.json());
+      setLineItems(fres.lineItems || []);
     } catch (e) { console.error(e); } finally { setAdding(false); }
   };
-  const handleRemoveItem = async (id: string) => { await removeLineItem({ data: { id } }); setItems(items.filter((i: any) => i.id !== id)); };
-  const handleStatusChange = async (s: string) => { await updateEstimateStatus({ data: { id: estimate.id, status: s } }); setStatus(s); };
+
+  const handleRemoveItem = async (id: string) => {
+    await fetch("/api/call", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ function: "estimates.removeLineItem", args: { data: { id } } }),
+      credentials: "include",
+    });
+    setLineItems(lineItems.filter((i: any) => i.id !== id));
+  };
+
+  const handleStatusChange = async (s: string) => {
+    await fetch("/api/call", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ function: "estimates.updateEstimateStatus", args: { data: { ids: [estimate.id], status: s } } }),
+      credentials: "include",
+    });
+    setStatus(s);
+  };
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="border-b border-gray-200 dark:border-gray-800">
@@ -61,12 +131,12 @@ function EstimateDetail() {
         </div>
         <div className="mt-8">
           <h2 className="text-lg font-semibold">Line Items</h2>
-          {items.length === 0 ? <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">No line items yet.</p> : (
+          {lineItems.length === 0 ? <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">No line items yet.</p> : (
             <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-950"><tr><th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Description</th><th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 text-right">Qty</th><th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400">Unit</th><th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 text-right">Unit Cost</th><th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 text-right">Markup</th><th className="px-4 py-3 font-medium text-gray-600 dark:text-gray-400 text-right">Total</th><th></th></tr></thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                  {items.map((item: any) => (
+                  {lineItems.map((item: any) => (
                     <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-950">
                       <td className="px-4 py-3">{item.description}</td><td className="px-4 py-3 text-right">{item.quantity}</td><td className="px-4 py-3">{item.unit}</td><td className="px-4 py-3 text-right">${Number(item.unit_cost).toFixed(2)}</td><td className="px-4 py-3 text-right">{item.markup_percent}%</td><td className="px-4 py-3 text-right font-medium">${calcTotal(item).toFixed(2)}</td><td className="px-4 py-3 text-right"><button onClick={() => handleRemoveItem(item.id)} className="text-xs text-red-600 hover:text-red-500">Remove</button></td>
                     </tr>

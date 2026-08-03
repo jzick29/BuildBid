@@ -29,16 +29,6 @@ function ChangeOrdersPage() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="border-b border-gray-200 dark:border-gray-800">
-        <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link to="/dashboard" className="text-xl font-bold tracking-tight text-indigo-600 dark:text-indigo-400">BuildBid</Link>
-          <div className="flex items-center gap-4 text-sm font-medium">
-            <Link to="/dashboard" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">Dashboard</Link>
-            <Link to="/change-orders" className="font-semibold text-indigo-600 dark:text-indigo-400">Change Orders</Link>
-            <span className="text-gray-600 dark:text-gray-400">{user.email}</span>
-          </div>
-        </nav>
-      </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-12">
         <h1 className="text-3xl font-bold tracking-tight">Change Orders</h1>
         {orders.length === 0 ? <div className="mt-10 rounded-xl border border-dashed border-gray-300 p-12 text-center dark:border-gray-700"><p className="text-gray-500">No change orders yet</p></div> : (

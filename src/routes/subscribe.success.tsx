@@ -1,38 +1,27 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
-import { createServerFn } from "@tanstack/react-start";
-import { upgradeSubscription } from "~/lib/auth";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
-const handleUpgrade = createServerFn({ method: "GET" })
-  .validator((d: unknown) => d as { plan?: string })
-  .handler(async ({ data }) => {
-    const plan = data.plan && ["starter", "pro", "shop"].includes(data.plan) ? data.plan : "starter";
-    try {
-      const result = await upgradeSubscription({ data: { tier: plan } });
-      return { upgraded: result.success, plan };
-    } catch (_) {
-      throw redirect({ to: "/login" });
-    }
-  });
+
 
 export const Route = createFileRoute("/subscribe/success")({
-  loader: async ({ params }: any) => {
-    // The loader gets search params via the request
-    return {};
-  },
+  loader: async () => ({}),
   component: SuccessPage,
 });
 
 function SuccessPage() {
   // Call handleUpgrade on mount via a hidden form approach
   // We pass plan from the URL query string
-  if (typeof window !== "undefined") {
+  useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     const plan = sp.get("plan") || "starter";
-    // Call the server function
-    handleUpgrade({ data: { plan } }).catch(() => {});
-    // Track subscription conversion
+    if (["starter", "pro", "shop"].includes(plan)) {
+      fetch("/api/call", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ function: "auth.upgradeSubscription", args: { data: { tier: plan } } }),
+        credentials: "include",
+      }).catch(() => {});
+    }
     if (typeof window !== "undefined") (window as any).__buildbidTrack?.("subscription");
-  }
+  }, []);
 
   return (
     <div className="flex min-h-dvh flex-col">

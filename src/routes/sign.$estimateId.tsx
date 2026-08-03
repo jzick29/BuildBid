@@ -2,15 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 
 export const Route = createFileRoute("/sign/$estimateId")({
-  loader: async ({ params }) => {
-    const data = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "materials.getPublicEstimate", args: { data: { id: params.estimateId } } }), credentials: "include" }).then(r => r.json());
-    return data;
-  },
+  loader: async () => ({}),
   component: SignPage,
 });
 
 function SignPage() {
-  const { estimate, items } = Route.useLoaderData();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drawing, setDrawing] = useState(false);
   const [signed, setSigned] = useState(!!estimate.signature_data);

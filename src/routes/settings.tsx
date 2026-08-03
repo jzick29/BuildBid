@@ -42,17 +42,6 @@ function SettingsPage() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="border-b border-gray-200 dark:border-gray-800">
-        <nav className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-          <Link to="/dashboard" className="text-xl font-bold tracking-tight text-indigo-600 dark:text-indigo-400">BuildBid</Link>
-          <div className="flex items-center gap-4 text-sm font-medium">
-            <Link to="/dashboard" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">Dashboard</Link>
-            <Link to="/settings" className="font-semibold text-indigo-600 dark:text-indigo-400">Settings</Link>
-            <span className="text-gray-600 dark:text-gray-400">{user.email}</span>
-            <button onClick={handleLogout} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900">Sign Out</button>
-          </div>
-        </nav>
-      </header>
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-12">
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
 

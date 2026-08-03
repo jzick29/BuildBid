@@ -2,15 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
 export const Route = createFileRoute("/co/$id")({
-  loader: async ({ params }) => {
-    const data = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "changeOrders.getPublicChangeOrder", args: { data: { id: params.id } } }), credentials: "include" }).then(r => r.json());
-    return data;
-  },
+  loader: async () => ({}),
   component: CoPage,
 });
 
 function CoPage() {
-  const { changeOrder, items } = Route.useLoaderData();
   const [responding, setResponding] = useState(false);
   const [status, setStatus] = useState(changeOrder.status);
 

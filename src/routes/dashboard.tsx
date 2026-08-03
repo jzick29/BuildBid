@@ -48,7 +48,6 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState("");
   const [feedbackRating, setFeedbackRating] = useState(0);
@@ -82,9 +81,31 @@ function Dashboard() {
 
   const totalEstimates = estimates.length;
   const draftCount = estimates.filter((e: any) => e.status === "draft").length;
+  const sentCount = estimates.filter((e: any) => e.status === "sent").length;
   const wonCount = estimates.filter((e: any) => e.status === "won").length;
   const lostCount = estimates.filter((e: any) => e.status === "lost").length;
   const recentEstimates = estimates.slice(0, 5);
+
+  // Win rate
+  const winRate = wonCount + lostCount > 0 ? Math.round((wonCount / (wonCount + lostCount)) * 100) : 0;
+  const winRateColor = winRate >= 50 ? "border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30" : winRate >= 30 ? "border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950/30" : "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30";
+  const winRateTextColor = winRate >= 50 ? "text-green-800 dark:text-green-300" : winRate >= 30 ? "text-yellow-800 dark:text-yellow-300" : "text-red-800 dark:text-red-300";
+
+  // Pipeline value = sum of all non-lost estimate totals
+  const pipelineTotal = estimates.filter((e: any) => e.status !== "lost").reduce((sum: number, e: any) => sum + (parseFloat(e.total) || 0), 0);
+
+  // Pipeline stages
+  const pipelineStages = ["draft", "sent", "won"];
+  const pipelineMax = Math.max(draftCount + sentCount + wonCount, 1);
+
+  // Trade chart
+  const tradesMap: Record<string, number> = {};
+  estimates.forEach((e: any) => {
+    const t = e.trade || "general";
+    tradesMap[t] = (tradesMap[t] || 0) + 1;
+  });
+  const tradeEntries = Object.entries(tradesMap).sort((a, b) => b[1] - a[1]);
+  const tradeMax = Math.max(...tradeEntries.map(([,c]) => c), 1);
 
   const dismissTips = () => {
     localStorage.setItem("buildbid_tips_dismissed", "1");
@@ -125,74 +146,6 @@ function Dashboard() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="border-b border-gray-200 dark:border-gray-800">
-        <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <span className="text-xl font-bold tracking-tight text-indigo-600 dark:text-indigo-400">
-            BuildBid
-          </span>
-          <div className="flex items-center gap-6 text-sm font-medium">
-            <Link to="/" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-              Home
-            </Link>
-            <Link to="/estimates" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-              Estimates
-            </Link>
-            <Link to="/templates" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-              Templates
-            </Link>
-            <Link to="/analytics" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-              Analytics
-            </Link>
-            <Link to="/customers" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-              Customers
-            </Link>
-            <Link to="/materials" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-              Materials
-            </Link>
-            <Link to="/team" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-              Team
-            </Link>
-            <Link to="/invoices" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-              Invoices
-            </Link>
-            <Link to="/contracts" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-              Contracts
-            </Link>
-            {user.isAdmin && (
-              <Link to="/admin" className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:hover:bg-amber-900">
-                Admin
-              </Link>
-            )}
-            <Link to="/schedule" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-              Schedule
-            </Link>
-            <Link to="/price-lists" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-              Price Lists
-            </Link>
-            <Link to="/integrations" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-              Integrations
-            </Link>
-            <Link to="/share" className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-              Share
-            </Link>
-            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${planBadgeColor}`}>
-              {planLabel}
-              {(user.subscriptionTier === "free" || user.subscriptionTier === "trial") && (
-                <Link to="/subscribe" className="ml-1 underline hover:no-underline">Upgrade</Link>
-              )}
-            </span>
-            <span className="text-gray-600 dark:text-gray-400">
-              {user.name || user.email}
-            </span>
-            <button
-              onClick={handleLogout}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900"
-            >
-              Sign Out
-            </button>
-          </div>
-        </nav>
-      </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-12">
         {!tipsDismissed && totalEstimates === 0 && (
@@ -245,7 +198,8 @@ function Dashboard() {
           </Link>
         </div>
 
-        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Stat cards — 5 columns */}
+        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Estimates</p>
             <p className="mt-2 text-3xl font-bold">{totalEstimates}</p>
@@ -262,7 +216,56 @@ function Dashboard() {
             <p className="text-sm font-medium text-red-700 dark:text-red-400">Lost</p>
             <p className="mt-2 text-3xl font-bold text-red-800 dark:text-red-300">{lostCount}</p>
           </div>
+          <div className={`rounded-xl border p-6 ${winRateColor}`}>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Win Rate</p>
+            <p className={`mt-2 text-3xl font-bold ${winRateTextColor}`}>{winRate}%</p>
+          </div>
         </div>
+
+        {/* Quick Actions */}
+        <div className="mt-8">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Quick Actions</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <Link to="/estimates/new" className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4 hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950/30 dark:hover:bg-indigo-950/50 transition-colors">
+              <svg className="h-6 w-6 text-indigo-600 dark:text-indigo-400 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+              <span className="text-sm font-medium text-indigo-700 dark:text-indigo-300">New Estimate</span>
+            </Link>
+            <Link to="/templates" className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-950 transition-colors">
+              <svg className="h-6 w-6 text-gray-500 dark:text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Browse Templates</span>
+            </Link>
+            <Link to="/schedule" className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-950 transition-colors">
+              <svg className="h-6 w-6 text-gray-500 dark:text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">View Schedule</span>
+            </Link>
+            <Link to="/invoices" className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-950 transition-colors">
+              <svg className="h-6 w-6 text-gray-500 dark:text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Send Invoice</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* Trade bar chart */}
+        {tradeEntries.length > 0 && (
+          <div className="mt-10">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Estimates by Trade</h2>
+            <div className="mt-4 space-y-3">
+              {tradeEntries.map(([trade, count]) => (
+                <div key={trade} className="flex items-center gap-4">
+                  <span className="w-24 text-sm text-gray-600 dark:text-gray-400 capitalize shrink-0">{trade}</span>
+                  <div className="flex-1 bg-gray-100 dark:bg-gray-800 rounded-full h-6 overflow-hidden">
+                    <div
+                      className="h-full bg-indigo-500 dark:bg-indigo-600 rounded-full transition-all duration-500 flex items-center justify-end pr-3"
+                      style={{ width: `${(count / tradeMax) * 100}%` }}
+                    >
+                      <span className="text-xs font-medium text-white">{count}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="mt-10">
           <div className="flex items-center justify-between">
@@ -318,6 +321,48 @@ function Dashboard() {
             </div>
           )}
         </div>
+
+        {/* Revenue Pipeline */}
+        {totalEstimates > 0 && (
+          <div className="mt-10">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Revenue Pipeline</h2>
+            <div className="mt-4 rounded-xl border border-gray-200 p-6 dark:border-gray-800">
+              <div className="flex h-10 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800">
+                {pipelineStages.map((stage) => {
+                  const count = estimates.filter((e: any) => e.status === stage).length;
+                  const pct = pipelineMax > 0 ? (count / pipelineMax) * 100 : 0;
+                  const colors: Record<string, string> = {
+                    draft: "bg-yellow-400",
+                    sent: "bg-blue-400",
+                    won: "bg-green-400",
+                  };
+                  return (
+                    <div
+                      key={stage}
+                      className={`${colors[stage] || "bg-gray-400"} flex items-center justify-center text-xs font-semibold text-white transition-all`}
+                      style={{ width: `${pct}%`, minWidth: pct > 0 ? "2rem" : "0" }}
+                    >
+                      {count > 0 && count}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-3 flex justify-between text-sm text-gray-500 dark:text-gray-400">
+                {pipelineStages.map((stage) => {
+                  const count = estimates.filter((e: any) => e.status === stage).length;
+                  const pct = pipelineMax > 0 ? Math.round((count / pipelineMax) * 100) : 0;
+                  return (
+                    <span key={stage} className="capitalize">{stage} · {count} ({pct}%)</span>
+                  );
+                })}
+              </div>
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-between items-center">
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Pipeline Value</span>
+                <span className="text-xl font-bold text-gray-900 dark:text-gray-100">${pipelineTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-10">
           <h2 className="text-xl font-semibold">Upcoming Jobs</h2>
