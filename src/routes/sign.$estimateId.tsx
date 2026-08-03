@@ -1,11 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
-import { getPublicEstimate, savePublicSignature } from "~/lib/materials";
-import { createDepositLink } from "~/lib/payments";
 
 export const Route = createFileRoute("/sign/$estimateId")({
   loader: async ({ params }) => {
-    const data = await getPublicEstimate({ data: { id: params.estimateId } });
+    const data = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "materials.getPublicEstimate", args: { data: { id: params.estimateId } } }), credentials: "include" }).then(r => r.json());
     return data;
   },
   component: SignPage,
@@ -56,9 +54,7 @@ function SignPage() {
     const depositAmount = total * 0.1; // 10% deposit
     setCreatingDeposit(true);
     try {
-      const result = await createDepositLink({
-        data: { estimateId: estimate.id, amount: depositAmount, description: `Deposit for ${estimate.project_name}` }
-      });
+      const result = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "payments.createDepositLink", args: { data: { estimateId: estimate.id, amount: depositAmount, description: `Deposit for ${estimate.project_name}` } } }), credentials: "include" }).then(r => r.json());
       setDepositUrl(result.url);
       window.open(result.url, "_blank");
     } catch (e: any) { alert("Payment not available: " + e.message); }
@@ -70,7 +66,7 @@ function SignPage() {
     if (!canvas) return;
     setSaving(true);
     try {
-      await savePublicSignature({ data: { estimateId: estimate.id, signatureData: canvas.toDataURL("image/png") } });
+      await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "materials.savePublicSignature", args: { data: { estimateId: estimate.id, signature: canvas.toDataURL("image/png") } } }), credentials: "include" });
       setSigned(true);
     } catch (e) {}
     finally { setSaving(false); }

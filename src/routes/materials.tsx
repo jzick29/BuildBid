@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { listMaterials } from "~/lib/materials";
 
 export const Route = createFileRoute("/materials")({ component: MaterialsPage });
 
@@ -17,7 +16,7 @@ function MaterialsPage() {
         const meData = await meRes.json();
         if (!meData.user) { window.location.href = "/login"; return; }
         setUser(meData.user);
-        const m = await listMaterials({ data: undefined }).catch(() => []);
+        const m = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "materials.listMaterials", args: {} }), credentials: "include" }).then(r => r.json()).catch(() => []);
         setMaterials(m);
       } catch (e: any) { setError(e.message); }
       finally { setLoading(false); }

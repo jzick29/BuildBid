@@ -1,10 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { getPublicChangeOrder, approveChangeOrder } from "~/lib/change-order-workflow";
 
 export const Route = createFileRoute("/co/$id")({
   loader: async ({ params }) => {
-    const data = await getPublicChangeOrder({ data: { id: params.id } });
+    const data = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "changeOrders.getPublicChangeOrder", args: { data: { id: params.id } } }), credentials: "include" }).then(r => r.json());
     return data;
   },
   component: CoPage,
@@ -20,7 +19,7 @@ function CoPage() {
   const handleResponse = async (approved: boolean) => {
     setResponding(true);
     try {
-      const res = await approveChangeOrder({ data: { changeOrderId: changeOrder.id, approved } });
+      const res = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "changeOrders.approveChangeOrder", args: { data: { id: changeOrder.id } } }), credentials: "include" }) ;
       setStatus(res.status);
     } catch(e) {}
     finally { setResponding(false); }

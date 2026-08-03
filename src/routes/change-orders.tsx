@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { listAllChangeOrders } from "~/lib/change-order-workflow";
 
 export const Route = createFileRoute("/change-orders")({ component: ChangeOrdersPage });
 
@@ -17,7 +16,7 @@ function ChangeOrdersPage() {
         const meData = await meRes.json();
         if (!meData.user) { window.location.href = "/login"; return; }
         setUser(meData.user);
-        const o = await listAllChangeOrders().catch(() => []);
+        const o = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "changeOrders.listAllChangeOrders", args: {} }), credentials: "include" }).then(r => r.json()).catch(() => []);
         setOrders(o);
       } catch (e: any) { setError(e.message); }
       finally { setLoading(false); }

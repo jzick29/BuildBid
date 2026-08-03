@@ -1,6 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { listInvoices } from "~/lib/invoices";
 
 export const Route = createFileRoute("/invoices")({ component: InvoicesPage });
 
@@ -18,7 +17,7 @@ function InvoicesPage() {
         const meData = await meRes.json();
         if (!meData.user) { window.location.href = "/login"; return; }
         setUser(meData.user);
-        const inv = await listInvoices().catch(() => []);
+        const inv = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "invoices.listInvoices", args: {} }), credentials: "include" }).then(r => r.json()).catch(() => []);
         setInvoices(inv);
       } catch (e: any) { setError(e.message); }
       finally { setLoading(false); }

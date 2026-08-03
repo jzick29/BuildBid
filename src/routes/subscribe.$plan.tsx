@@ -1,7 +1,5 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { getCurrentUser } from "~/lib/auth";
-import { getStripeLink, getPlanPrices } from "~/lib/subscriptions";
 
 const plans = [
   { id: "starter", name: "Starter", desc: "For solo operators", features: ["Single user", "Core estimating", "Basic templates"] },
@@ -13,10 +11,11 @@ export const Route = createFileRoute("/subscribe/$plan")({
   loader: async ({ params }) => {
     const plan = plans.find(p => p.id === params.plan);
     if (!plan) throw redirect({ to: "/" });
-    const user = await getCurrentUser();
+    const meRes = await fetch("http://localhost:3000/api/me"); const meData = await meRes.json(); const user = meData.user;
     if (!user.user) throw redirect({ to: "/login" });
-    const prices = getPlanPrices(params.plan);
-    return { plan, prices, user: user.user, stripeLink: getStripeLink(params.plan) };
+    const priceMap = { starter: { monthly: 49, annual: 39 }, pro: { monthly: 99, annual: 79 }, shop: { monthly: 199, annual: 159 } };
+    const prices = priceMap[params.plan] || priceMap.starter;
+    return { plan, prices, user: user.user, stripeLink: ({ starter: "https://buy.stripe.com/dRmaEZ7ej5np8B8g5t57W0o", pro: "https://buy.stripe.com/8x29AVgOT4jl04C5qP57W0o", shop: "https://buy.stripe.com/7sYcN7fKPg23cRo8D157W0q" }[params.plan] || "https://buy.stripe.com/dRmaEZ7ej5np8B8g5t57W0o") };
   },
   component: SubscribePage,
 });

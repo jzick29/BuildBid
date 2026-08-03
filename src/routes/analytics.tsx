@@ -1,6 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { getAnalytics } from "~/lib/analytics";
 import { UpgradeGate } from "~/components/UpgradeBanner";
 
 export const Route = createFileRoute("/analytics")({ component: AnalyticsPage });
@@ -19,7 +18,8 @@ function AnalyticsPage() {
         const meData = await meRes.json();
         if (!meData.user) { window.location.href = "/login"; return; }
         setUser(meData.user);
-        const d = await getAnalytics();
+        const res = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "analytics.getAnalytics", args: {} }), credentials: "include" });
+        const d = await res.json();
         setData(d);
       } catch (e: any) { setError(e.message); }
       finally { setLoading(false); }

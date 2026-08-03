@@ -1,15 +1,8 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
-import { listUsers, setUserPlan, toggleUserFrozen, deleteUser } from "~/lib/admin";
-import { getCurrentUser } from "~/lib/auth";
+import { useState, useEffect } from "react";
 
 export const Route = createFileRoute("/admin")({
-  loader: async () => {
-    const { user } = await getCurrentUser();
-    if (!user?.isAdmin) throw new (await import("@tanstack/react-router")).redirect({ to: "/dashboard" });
-    const { users, stats } = await listUsers();
-    return { user, users, stats };
-  },
+  loader: async () => ({}),
   component: AdminDashboard,
 });
 
@@ -17,16 +10,32 @@ const PLANS = ["trial", "free", "starter", "pro", "shop"] as const;
 
 function AdminDashboard() {
   const router = useRouter();
-  const { user, users, stats } = Route.useLoaderData();
+  const [user, setUser] = useState<any>(null);
+  const [users, setUsers] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>({});
+  const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [changingPlan, setChangingPlan] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
+
+  const loadData = async () => {
+    const meRes = await fetch("/api/me", { credentials: "include" });
+    const meData = await meRes.json();
+    if (!meData.user) { window.location.href = "/login"; return; }
+    setUser(meData.user);
+    const res = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "admin.listUsers", args: {} }), credentials: "include" });
+    const d = await res.json();
+    if (d.users) { setUsers(d.users); setStats(d.stats || {}); }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadData(); }, []);
 
   const handleChangePlan = async (userId: string, tier: string) => {
     if (!confirm(`Change this user's plan to ${tier}?`)) return;
     setActionError("");
     try {
-      await setUserPlan({ data: { userId, tier } });
+      await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "admin.setUserPlan", args: { data: { userId, tier } } }), credentials: "include" });
       router.navigate({ to: "/admin" });
     } catch (err: any) {
       setActionError(err.message || "Failed to change plan");
@@ -38,7 +47,7 @@ function AdminDashboard() {
     if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} this user?`)) return;
     setActionError("");
     try {
-      await toggleUserFrozen({ data: { userId } });
+      await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "admin.toggleUserFrozen", args: { data: { userId } } }), credentials: "include" });
       router.navigate({ to: "/admin" });
     } catch (err: any) {
       setActionError(err.message || `Failed to ${action}`);
@@ -49,7 +58,7 @@ function AdminDashboard() {
     if (!confirm("Permanently delete this user and ALL their data? This cannot be undone.")) return;
     setActionError("");
     try {
-      await deleteUser({ data: { userId } });
+      await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "admin.deleteUser", args: { data: { userId } } }), credentials: "include" });
       router.navigate({ to: "/admin" });
     } catch (err: any) {
       setActionError(err.message || "Failed to delete user");

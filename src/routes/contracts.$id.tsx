@@ -1,13 +1,11 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { getCurrentUser } from "~/lib/auth";
-import { getContract, generateNextVisit, completeVisit, updateContractStatus } from "~/lib/contracts";
 
 export const Route = createFileRoute("/contracts/$id")({
   loader: async ({ params }) => {
-    const { user } = await getCurrentUser();
+    const meRes = await fetch("http://localhost:3000/api/me"); const meData = await meRes.json(); const user = meData.user;
     if (!user) throw new Error("Unauthorized");
-    const data = await getContract({ data: { id: params.id } });
+    const data = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "contracts.getContract", args: { data: { id: params.id } } }), credentials: "include" }).then(r => r.json());
     return { user, ...data };
   },
   component: ContractDetail,
@@ -29,7 +27,7 @@ function ContractDetail() {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      await generateNextVisit({ data: { contractId: contract.id } });
+      await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "contracts.generateNextVisit", args: { data: { contractId: contract.id } } }), credentials: "include" }).then(r => r.json());
       router.invalidate();
     } catch (e: any) { alert(e.message); }
     finally { setGenerating(false); }
@@ -38,14 +36,14 @@ function ContractDetail() {
   const handleComplete = async (visitId: string) => {
     setCompleting(visitId);
     try {
-      await completeVisit({ data: { visitId } });
+      await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "contracts.completeVisit", args: { data: { visitId } } }), credentials: "include" });
       router.invalidate();
     } catch (e: any) { alert(e.message); }
     finally { setCompleting(null); }
   };
 
   const handleStatus = async (status: string) => {
-    await updateContractStatus({ data: { id: contract.id, status } });
+    await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "contracts.updateContractStatus", args: { data: { id: contract.id, status } } }), credentials: "include" });
     router.invalidate();
   };
 

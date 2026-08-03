@@ -1,14 +1,12 @@
 import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { getCurrentUser } from "~/lib/auth";
-import { getAutomations, saveAutomation, checkAutomations } from "~/lib/email-automations";
 
 export const Route = createFileRoute("/automation")({
   loader: async () => {
-    const { user } = await getCurrentUser();
+    const meRes = await fetch("http://localhost:3000/api/me"); const meData = await meRes.json(); const user = meData.user;
     if (!user) throw redirect({ to: "/login" });
-    const automations = await getAutomations();
-    const checks = await checkAutomations();
+    const automations = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "emailAutomations.getAutomations", args: {} }), credentials: "include" }).then(r => r.json());
+    const checks = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "emailAutomations.checkAutomations", args: {} }), credentials: "include" }).then(r => r.json());
     return { user, automations, checks };
   },
   component: AutomationPage,
@@ -30,7 +28,7 @@ function AutomationPage() {
 
   const handleSave = async (type: string) => {
     setSaving(type);
-    await saveAutomation({ data: { type, enabled: forms[type]?.enabled ?? true, template: forms[type]?.template ?? "" } });
+    await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "emailAutomations.saveAutomation", args: { data: { type, enabled: forms[type]?.enabled ?? true, template: forms[type]?.template ?? "" } } }), credentials: "include" });
     setSaving("");
   };
 

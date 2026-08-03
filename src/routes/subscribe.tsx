@@ -1,34 +1,32 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { getCurrentUser } from "~/lib/auth";
-import { getStripeLink, getPlanPrices } from "~/lib/subscriptions";
 
 const plans = [
   {
     id: "starter", name: "Starter", desc: "For solo operators",
     price: "$49", annual: "$39",
     features: ["Single user", "Core estimating with line items", "Basic templates", "Photo attachments", "Email proposals"],
-    stripeLink: getStripeLink("starter"),
+    stripeLink: "https://buy.stripe.com/dRmaEZ7ej5np8B8g5t57W0o",
     highlight: false,
   },
   {
     id: "pro", name: "Pro", desc: "For growing teams",
     price: "$99", annual: "$79",
     features: ["Up to 5 users", "Everything in Starter", "Custom assemblies & templates", "Branded PDF proposals", "Change orders"],
-    stripeLink: getStripeLink("pro"),
+    stripeLink: "https://buy.stripe.com/8x29AVgOT4jl04C5qP57W0o",
     highlight: true,
   },
   {
     id: "shop", name: "Shop", desc: "For established shops",
     price: "$199", annual: "$159",
     features: ["Unlimited users", "Everything in Pro", "Job costing & analytics", "QuickBooks integration", "Priority support"],
-    stripeLink: getStripeLink("shop"),
+    stripeLink: "https://buy.stripe.com/7sYcN7fKPg23cRo8D157W0q",
     highlight: false,
   },
 ];
 
 export const Route = createFileRoute("/subscribe")({
   loader: async () => {
-    const result = await getCurrentUser();
+    const meRes = await fetch("http://localhost:3000/api/me"); const meData = await meRes.json(); const result = { user: meData.user };
     return { user: result.user };
   },
   component: PlansPage,
