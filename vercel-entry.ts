@@ -162,6 +162,25 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             result = { estimates: rows };
             break;
           }
+          case "estimates.createEstimate": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const d = args?.data || {};
+            if (!d.projectName?.trim() || !d.customerName?.trim()) { res.statusCode = 400; res.end(JSON.stringify({ error: "Missing fields" })); return; }
+            const eid = crypto.randomUUID();
+            await pool.query("INSERT INTO estimates (id, user_id, project_name, customer_name, trade, status) VALUES ($1,$2,$3,$4,$5,'draft')",
+              [eid, userId, d.projectName.trim(), d.customerName.trim(), d.trade || "general"]);
+            result = { id: eid };
+            break;
+          }
+          case "estimates.deleteEstimate": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const eid = args?.data?.id;
+            if (!eid) { res.statusCode = 400; res.end(JSON.stringify({ error: "Missing id" })); return; }
+            await pool.query("DELETE FROM line_items WHERE estimate_id=$1", [eid]);
+            await pool.query("DELETE FROM estimates WHERE id=$1 AND user_id=$2", [eid, userId]);
+            result = { success: true };
+            break;
+          }
           case "scheduling.getScheduledJobs": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             let sql2 = "SELECT id, project_name, customer_name, trade, status, start_date, end_date FROM estimates WHERE user_id = $1 AND start_date IS NOT NULL AND start_date != ''";

@@ -1,6 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { createEstimate } from "~/lib/estimates";
 
 export const Route = createFileRoute("/estimates/new")({
   loader: async () => ({}),
@@ -66,7 +65,14 @@ function NewEstimate() {
     e.preventDefault();
     setFormError(""); setSubmitting(true);
     try {
-      const result = await createEstimate({ data: { projectName, customerName, trade } });
+      const res = await fetch("/api/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ function: "estimates.createEstimate", args: { data: { projectName, customerName, trade } } }),
+        credentials: "include",
+      });
+      const result = await res.json();
+      if (result.error) throw new Error(result.error);
       if (existingCount === 0 && typeof window !== "undefined") {
         (window as any).__buildbidTrack?.("trial_started");
       }

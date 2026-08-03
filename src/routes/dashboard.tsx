@@ -1,7 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { logout } from "~/lib/auth";
-import { submitFeedback } from "~/lib/feedback";
 
 export const Route = createFileRoute("/dashboard")({
   loader: async () => ({}),
@@ -97,7 +95,12 @@ function Dashboard() {
     if (!feedbackMsg.trim() || feedbackSubmitting) return;
     setFeedbackSubmitting(true);
     try {
-      await submitFeedback({ data: { message: feedbackMsg, rating: feedbackRating } });
+      await fetch("/api/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ function: "feedback.submit", args: { data: { message: feedbackMsg, rating: feedbackRating } } }),
+        credentials: "include",
+      });
       setFeedbackSent(true);
       setTimeout(() => { setFeedbackOpen(false); setFeedbackSent(false); setFeedbackMsg(""); setFeedbackRating(0); }, 2000);
     } catch (e) {
@@ -107,7 +110,7 @@ function Dashboard() {
   };
 
   const handleLogout = async () => {
-    await logout();
+    await fetch("/api/logout", { method: "POST", credentials: "include" });
     router.navigate({ to: "/" });
   };
 

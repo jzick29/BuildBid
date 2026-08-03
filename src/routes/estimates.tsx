@@ -1,7 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { deleteEstimate } from "~/lib/estimates";
-import { logout } from "~/lib/auth";
 
 export const Route = createFileRoute("/estimates")({
   loader: async () => ({}),
@@ -38,10 +36,15 @@ function EstimatesList() {
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this estimate?")) return;
     setDeleting(id);
-    await deleteEstimate({ data: { id } });
+    await fetch("/api/call", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ function: "estimates.deleteEstimate", args: { data: { id } } }),
+      credentials: "include",
+    });
     router.navigate({ to: "/estimates" });
   };
-  const handleLogout = async () => { await logout(); router.navigate({ to: "/" }); };
+  const handleLogout = async () => { await fetch("/api/logout", { method: "POST", credentials: "include" }); router.navigate({ to: "/" }); };
 
   if (loading) return <div className="flex min-h-dvh items-center justify-center"><p className="text-gray-500">Loading...</p></div>;
   if (error) return <div className="flex min-h-dvh items-center justify-center"><p className="text-red-500">{error}</p></div>;
