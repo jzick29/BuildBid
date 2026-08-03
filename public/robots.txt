@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /signup
+Disallow: /login
+Disallow: /dashboard
+Disallow: /estimates
+Disallow: /templates
+Disallow: /settings
+Disallow: /api/
+
+Sitemap: https://buildbid.pro/sitemap.xml
