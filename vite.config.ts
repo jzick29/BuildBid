@@ -18,10 +18,7 @@ export default defineConfig({
     tsConfigPaths({
       projects: ["./tsconfig.json"],
     }),
-    tanstackStart({
-      // Force Vercel deployment target
-      deployment: "vercel",
-    }),
+    tanstackStart(),
     viteReact(),
   ],
 });
