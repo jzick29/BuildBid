@@ -1,24 +1,6 @@
-import { createServerFn } from "@tanstack/react-start";
-import { redirect } from "@tanstack/react-router";
-import { getCookie, deleteCookie } from "@tanstack/react-start/server";
+import { makeAuthFn } from "./iso";
 
-const SESSION_COOKIE = "buildbid_session";
-
-async function requireUser() {
-  const db = await (await import("./db.server")).getDb();
-  const token = getCookie(SESSION_COOKIE);
-  if (!token) throw redirect({ to: "/login" });
-  const row = db.query(
-    "SELECT u.id FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > datetime('now')"
-  ).get(token) as any;
-  if (!row) {
-    deleteCookie(SESSION_COOKIE, { path: "/" });
-    throw redirect({ to: "/login" });
-  }
-  return row;
-}
-
-// Seed data
+// ─── Seed Data ─────────────────────────────────────────────────────
 const SEED_TEMPLATES: Array<{
   name: string; trade_type: string; description: string;
   items: Array<{ description: string; quantity: number; unit: string; unit_cost: number; markup_percent: number }>;
@@ -213,86 +195,248 @@ const SEED_TEMPLATES: Array<{
   },
 ];
 
-// Seed the database if empty
-export const seedTemplates = createServerFn({ method: "POST" }).handler(async () => {
-  await requireUser();
-  const db = await (await import("./db.server")).getDb();
-  const existing = db.query("SELECT COUNT(*) as c FROM templates").get() as any;
-  if (existing.c > 0) return { seeded: false, count: existing.c };
-  
-  const insert = db.transaction(() => {
-    for (const t of SEED_TEMPLATES) {
-      const tid = crypto.randomUUID();
-      db.run("INSERT INTO templates (id, name, trade_type, description) VALUES (?, ?, ?, ?)",
-        [tid, t.name, t.trade_type, t.description]);
-      t.items.forEach((item, i) => {
-        db.run("INSERT INTO template_line_items (id, template_id, description, quantity, unit, unit_cost, markup_percent, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          [crypto.randomUUID(), tid, item.description, item.quantity, item.unit, item.unit_cost, item.markup_percent, i]);
-      });
+// ─── getTemplates ───────────────────────────────────────────────────
+export const getTemplates = makeAuthFn("templates.getTemplates", async (args: any, userId: string, pool: any) => {
+  const data = args?.data || {};
+  const trade = data.trade;
+  const tab = data.tab;
+
+  let query = `SELECT t.*, COALESCE((SELECT COUNT(*) FROM template_line_items WHERE template_id = t.id), 0) as item_count FROM templates t`;
+  const params: any[] = [];
+  const conditions: string[] = [];
+
+  if (tab === "my") {
+    conditions.push(`t.user_id = $${params.length + 1}`);
+    params.push(userId);
+  } else if (tab === "shared") {
+    conditions.push(`t.user_id IS NOT NULL AND t.user_id != $${params.length + 1} AND t.id IN (SELECT template_id FROM template_shares)`);
+    params.push(userId);
+  } else {
+    // "all" — seeded templates (user_id IS NULL) plus current user's templates
+    conditions.push(`(t.user_id IS NULL OR t.user_id = $${params.length + 1})`);
+    params.push(userId);
+  }
+
+  if (trade) {
+    conditions.push(`t.trade_type = $${params.length + 1}`);
+    params.push(trade);
+  }
+
+  if (conditions.length > 0) {
+    query += " WHERE " + conditions.join(" AND ");
+  }
+
+  query += " ORDER BY t.user_id NULLS FIRST, t.trade_type, t.name";
+
+  const r = await pool.query(query, params);
+  return { templates: r.rows };
+});
+
+// ─── getTemplate ────────────────────────────────────────────────────
+export const getTemplate = makeAuthFn("templates.getTemplate", async (args: { data: { id: string } }, _userId: string, pool: any) => {
+  const tpl = await pool.query("SELECT * FROM templates WHERE id = $1", [args.data.id]);
+  if (!tpl.rows[0]) throw new Error("Template not found");
+  const items = await pool.query("SELECT * FROM template_line_items WHERE template_id = $1 ORDER BY sort_order", [args.data.id]);
+  return { template: tpl.rows[0], items: items.rows };
+});
+
+// ─── createEstimateFromTemplate ─────────────────────────────────────
+export const createEstimateFromTemplate = makeAuthFn("templates.createEstimateFromTemplate", async (args: { data: { templateId: string; projectName: string; customerName: string } }, userId: string, pool: any) => {
+  const tpl = await pool.query("SELECT * FROM templates WHERE id = $1", [args.data.templateId]);
+  if (!tpl.rows[0]) throw new Error("Template not found");
+
+  const items = await pool.query("SELECT * FROM template_line_items WHERE template_id = $1 ORDER BY sort_order", [args.data.templateId]);
+
+  const estimateId = crypto.randomUUID();
+  await pool.query(
+    "INSERT INTO estimates (id, user_id, project_name, customer_name, trade) VALUES ($1, $2, $3, $4, $5)",
+    [estimateId, userId, args.data.projectName.trim(), args.data.customerName.trim(), tpl.rows[0].trade_type]
+  );
+
+  for (const item of items.rows) {
+    const liId = crypto.randomUUID();
+    await pool.query(
+      "INSERT INTO line_items (id, estimate_id, description, quantity, unit, unit_cost, markup_percent, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      [liId, estimateId, item.description, item.quantity, item.unit, item.unit_cost, item.markup_percent, item.sort_order]
+    );
+  }
+
+  return { id: estimateId };
+});
+
+// ─── saveCustomTemplate ─────────────────────────────────────────────
+// Two modes:
+//   1. From an existing estimate: { estimateId, name }
+//   2. From imported JSON: { name, description, trade_type, items }
+export const saveCustomTemplate = makeAuthFn("templates.saveCustomTemplate", async (args: { data: { estimateId?: string; name?: string; description?: string; trade_type?: string; items?: any[] } }, userId: string, pool: any) => {
+  const d = args.data;
+  let templateName = d.name?.trim();
+  let templateDesc = d.description || "";
+  let tradeType = d.trade_type || "general";
+  let items: any[] = [];
+
+  if (d.estimateId) {
+    // Mode 1: save from existing estimate
+    const est = await pool.query("SELECT * FROM estimates WHERE id = $1 AND user_id = $2", [d.estimateId, userId]);
+    if (!est.rows[0]) throw new Error("Estimate not found");
+    if (!templateName) templateName = est.rows[0].project_name;
+    tradeType = est.rows[0].trade;
+    const liRows = await pool.query("SELECT * FROM line_items WHERE estimate_id = $1 ORDER BY sort_order", [d.estimateId]);
+    items = liRows.rows.map((li: any) => ({
+      description: li.description,
+      quantity: li.quantity,
+      unit: li.unit,
+      unit_cost: li.unit_cost,
+      markup_percent: li.markup_percent,
+    }));
+  } else if (d.items && d.items.length > 0) {
+    // Mode 2: from imported JSON
+    items = d.items;
+    if (!templateName) templateName = "Imported Template";
+  } else {
+    throw new Error("Either estimateId or items must be provided");
+  }
+
+  const tplId = crypto.randomUUID();
+  await pool.query(
+    "INSERT INTO templates (id, name, trade_type, description, user_id, item_count) VALUES ($1, $2, $3, $4, $5, $6)",
+    [tplId, templateName, tradeType, templateDesc, userId, items.length]
+  );
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const liId = crypto.randomUUID();
+    await pool.query(
+      "INSERT INTO template_line_items (id, template_id, description, quantity, unit, unit_cost, markup_percent, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      [liId, tplId, item.description, item.quantity || 1, item.unit || "each", item.unit_cost || 0, item.markup_percent || 0, i]
+    );
+  }
+
+  return { id: tplId, name: templateName };
+});
+
+// ─── seedTemplates ──────────────────────────────────────────────────
+export const seedTemplates = makeAuthFn("templates.seedTemplates", async (_args: any, _userId: string, pool: any) => {
+  const existing = await pool.query("SELECT COUNT(*) as c FROM templates WHERE user_id IS NULL");
+  if (parseInt(existing.rows[0].c) > 0) {
+    return { seeded: false, count: parseInt(existing.rows[0].c) };
+  }
+
+  for (const t of SEED_TEMPLATES) {
+    const tid = crypto.randomUUID();
+    await pool.query(
+      "INSERT INTO templates (id, name, trade_type, description, item_count) VALUES ($1, $2, $3, $4, $5)",
+      [tid, t.name, t.trade_type, t.description, t.items.length]
+    );
+    for (let i = 0; i < t.items.length; i++) {
+      const item = t.items[i];
+      await pool.query(
+        "INSERT INTO template_line_items (id, template_id, description, quantity, unit, unit_cost, markup_percent, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        [crypto.randomUUID(), tid, item.description, item.quantity, item.unit, item.unit_cost, item.markup_percent, i]
+      );
     }
-  });
-  insert();
+  }
+
   return { seeded: true, count: SEED_TEMPLATES.length };
 });
 
-// Get all templates, optionally filtered by trade
-export const getTemplates = createServerFn({ method: "GET" })
-  .validator((d: unknown) => d as { trade?: string } | undefined)
-  .handler(async ({ data }) => {
-    await requireUser();
-    const db = await (await import("./db.server")).getDb();
-    const trade = data?.trade;
-    let rows: any[];
-    if (trade) {
-      rows = db.query("SELECT * FROM templates WHERE trade_type = ? ORDER BY name").all(trade) as any[];
-    } else {
-      rows = db.query("SELECT * FROM templates ORDER BY trade_type, name").all() as any[];
-    }
-    return { templates: rows };
-  });
+// ─── updateTemplate ─────────────────────────────────────────────────
+export const updateTemplate = makeAuthFn("templates.updateTemplate", async (args: { data: { id: string; name: string; description: string; trade_type: string } }, userId: string, pool: any) => {
+  const tpl = await pool.query("SELECT id FROM templates WHERE id = $1 AND user_id = $2", [args.data.id, userId]);
+  if (!tpl.rows[0]) throw new Error("Template not found or not yours");
 
-// Get a template with its line items
-export const getTemplate = createServerFn({ method: "GET" })
-  .validator((d: unknown) => d as { id: string })
-  .handler(async ({ data }) => {
-    await requireUser();
-    const db = await (await import("./db.server")).getDb();
-    const tpl = db.query("SELECT * FROM templates WHERE id = ?").get(data.id) as any;
-    if (!tpl) throw new Error("Template not found");
-    const items = db.query("SELECT * FROM template_line_items WHERE template_id = ? ORDER BY sort_order").all(data.id) as any[];
-    return { template: tpl, items };
-  });
+  await pool.query(
+    "UPDATE templates SET name = $1, description = $2, trade_type = $3 WHERE id = $4",
+    [args.data.name, args.data.description, args.data.trade_type, args.data.id]
+  );
+  return { success: true };
+});
 
-// Create an estimate from a template
-export const createEstimateFromTemplate = createServerFn({ method: "POST" })
-  .validator((d: unknown) => {
-    const v = d as { templateId: string; projectName: string; customerName: string };
-    if (!v.templateId) throw new Error("Template ID required");
-    if (!v.projectName?.trim()) throw new Error("Project name is required");
-    if (!v.customerName?.trim()) throw new Error("Customer name is required");
-    return v;
-  })
-  .handler(async ({ data }) => {
-    const user = await requireUser();
-    const db = await (await import("./db.server")).getDb();
-    const mod = await import("./db.server");
-    
-    const tpl = db.query("SELECT * FROM templates WHERE id = ?").get(data.templateId) as any;
-    if (!tpl) throw new Error("Template not found");
-    
-    const items = db.query("SELECT * FROM template_line_items WHERE template_id = ? ORDER BY sort_order").all(data.templateId) as any[];
-    
-    const estimateId = await mod.createEstimate(user.id, data.projectName.trim(), data.customerName.trim(), tpl.trade_type);
-    
-    for (const item of items) {
-      await mod.addLineItem(estimateId, {
-        description: item.description,
-        quantity: item.quantity,
-        unit: item.unit,
-        unit_cost: item.unit_cost,
-        markup_percent: item.markup_percent,
-      });
-    }
-    
-    return { id: estimateId };
-  });
+// ─── updateTemplateItem ─────────────────────────────────────────────
+export const updateTemplateItem = makeAuthFn("templates.updateTemplateItem", async (args: { data: { id: string; description?: string; quantity?: number; unit?: string; unitCost?: number; markupPercent?: number } }, userId: string, pool: any) => {
+  // Verify ownership through template
+  const tpl = await pool.query(
+    "SELECT t.user_id FROM template_line_items li JOIN templates t ON t.id = li.template_id WHERE li.id = $1",
+    [args.data.id]
+  );
+  if (!tpl.rows[0] || tpl.rows[0].user_id !== userId) throw new Error("Template item not found or not yours");
+
+  const updates: string[] = [];
+  const params: any[] = [];
+  let idx = 1;
+
+  if (args.data.description !== undefined) { updates.push(`description = $${idx++}`); params.push(args.data.description); }
+  if (args.data.quantity !== undefined) { updates.push(`quantity = $${idx++}`); params.push(args.data.quantity); }
+  if (args.data.unit !== undefined) { updates.push(`unit = $${idx++}`); params.push(args.data.unit); }
+  if (args.data.unitCost !== undefined) { updates.push(`unit_cost = $${idx++}`); params.push(args.data.unitCost); }
+  if (args.data.markupPercent !== undefined) { updates.push(`markup_percent = $${idx++}`); params.push(args.data.markupPercent); }
+
+  if (updates.length > 0) {
+    params.push(args.data.id);
+    await pool.query(`UPDATE template_line_items SET ${updates.join(", ")} WHERE id = $${idx}`, params);
+  }
+  return { success: true };
+});
+
+// ─── addTemplateItem ────────────────────────────────────────────────
+export const addTemplateItem = makeAuthFn("templates.addTemplateItem", async (args: { data: { templateId: string; description: string; quantity: number; unit: string; unitCost: number; markupPercent: number } }, userId: string, pool: any) => {
+  const tpl = await pool.query("SELECT id, item_count FROM templates WHERE id = $1 AND user_id = $2", [args.data.templateId, userId]);
+  if (!tpl.rows[0]) throw new Error("Template not found or not yours");
+
+  const maxSort = await pool.query("SELECT COALESCE(MAX(sort_order), -1) as mx FROM template_line_items WHERE template_id = $1", [args.data.templateId]);
+  const id = crypto.randomUUID();
+  await pool.query(
+    "INSERT INTO template_line_items (id, template_id, description, quantity, unit, unit_cost, markup_percent, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+    [id, args.data.templateId, args.data.description, args.data.quantity || 1, args.data.unit || "each", args.data.unitCost || 0, args.data.markupPercent || 10, maxSort.rows[0].mx + 1]
+  );
+
+  // Update item_count
+  await pool.query("UPDATE templates SET item_count = (SELECT COUNT(*) FROM template_line_items WHERE template_id = $1) WHERE id = $1", [args.data.templateId]);
+
+  return { success: true };
+});
+
+// ─── removeTemplateItem ─────────────────────────────────────────────
+export const removeTemplateItem = makeAuthFn("templates.removeTemplateItem", async (args: { data: { id: string } }, userId: string, pool: any) => {
+  const tpl = await pool.query(
+    "SELECT t.id as template_id, t.user_id FROM template_line_items li JOIN templates t ON t.id = li.template_id WHERE li.id = $1",
+    [args.data.id]
+  );
+  if (!tpl.rows[0] || tpl.rows[0].user_id !== userId) throw new Error("Template item not found or not yours");
+
+  await pool.query("DELETE FROM template_line_items WHERE id = $1", [args.data.id]);
+  await pool.query("UPDATE templates SET item_count = (SELECT COUNT(*) FROM template_line_items WHERE template_id = $1) WHERE id = $1", [tpl.rows[0].template_id]);
+  return { success: true };
+});
+
+// ─── deleteTemplate ─────────────────────────────────────────────────
+export const deleteTemplate = makeAuthFn("templates.deleteTemplate", async (args: { data: { id: string } }, userId: string, pool: any) => {
+  const tpl = await pool.query("SELECT id FROM templates WHERE id = $1 AND user_id = $2", [args.data.id, userId]);
+  if (!tpl.rows[0]) throw new Error("Template not found or not yours");
+
+  await pool.query("DELETE FROM templates WHERE id = $1", [args.data.id]);
+  return { success: true };
+});
+
+// ─── shareTemplate ──────────────────────────────────────────────────
+export const shareTemplate = makeAuthFn("templates.shareTemplate", async (args: { data: { templateId: string } }, userId: string, pool: any) => {
+  const tpl = await pool.query("SELECT id FROM templates WHERE id = $1 AND user_id = $2", [args.data.templateId, userId]);
+  if (!tpl.rows[0]) throw new Error("Template not found or not yours");
+
+  // Check if already shared
+  const existing = await pool.query("SELECT share_token FROM template_shares WHERE template_id = $1 AND shared_by = $2", [args.data.templateId, userId]);
+  if (existing.rows[0]) {
+    const url = `https://buildbid.pro/templates/shared/${existing.rows[0].share_token}`;
+    return { url };
+  }
+
+  const shareToken = crypto.randomUUID();
+  const shareId = crypto.randomUUID();
+  await pool.query(
+    "INSERT INTO template_shares (id, template_id, shared_by, share_token) VALUES ($1, $2, $3, $4)",
+    [shareId, args.data.templateId, userId, shareToken]
+  );
+
+  const url = `https://buildbid.pro/templates/shared/${shareToken}`;
+  return { url };
+});
