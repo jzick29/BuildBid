@@ -30,6 +30,7 @@ import "~/lib/quickbooks";
 import "~/lib/scheduling";
 import "~/lib/signatures";
 import "~/lib/time-entries";
+import "~/lib/expenses";
 import "~/lib/subscriptions";
 import "~/lib/team";
 import "~/lib/templates";

@@ -51,6 +51,17 @@ function EstimateDetail() {
   const [timeCrew, setTimeCrew] = useState("");
   const [timeDate, setTimeDate] = useState(new Date().toISOString().slice(0, 10));
   const [savingTime, setSavingTime] = useState(false);
+  // Expense tracking
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [expenseSummary, setExpenseSummary] = useState<any>(null);
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [expenseDesc, setExpenseDesc] = useState("");
+  const [expenseAmount, setExpenseAmount] = useState("");
+  const [expenseCategory, setExpenseCategory] = useState("materials");
+  const [expenseVendor, setExpenseVendor] = useState("");
+  const [expenseDate, setExpenseDate] = useState(new Date().toISOString().slice(0, 10));
+  const [expenseNotes, setExpenseNotes] = useState("");
+  const [savingExpense, setSavingExpense] = useState(false);
   const [signedByName, setSignedByName] = useState("");
 
   const loadData = useCallback(async () => {
@@ -109,14 +120,28 @@ function EstimateDetail() {
             body: JSON.stringify({ function: "timeEntries.getTimeSummary", args: { data: { estimateId: id } } }),
             credentials: "include",
           }).then(r => r.json()),
+          fetch("/api/call", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ function: "expenses.listExpenses", args: { data: { estimateId: id } } }),
+            credentials: "include",
+          }).then(r => r.json()),
+          fetch("/api/call", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ function: "expenses.getExpenseSummary", args: { data: { estimateId: id } } }),
+            credentials: "include",
+          }).then(r => r.json()),
         ]);
       })
-      .then(([_est, mpData, verData, propData, teData, tsData]) => {
+      .then(([_est, mpData, verData, propData, teData, tsData, expData, expSumData]) => {
         if (mpData?.presets) setMarkupPresets(mpData.presets);
         if (verData?.versions) setVersions(verData.versions);
         if (propData?.proposals) setProposals(propData.proposals);
         if (teData?.timeEntries) setTimeEntries(teData.timeEntries);
         if (tsData) setTimeSummary(tsData);
+        if (expData?.expenses) setExpenses(expData.expenses);
+        if (expSumData) setExpenseSummary(expSumData);
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -274,6 +299,54 @@ function EstimateDetail() {
       body: JSON.stringify({ function: "timeEntries.getTimeSummary", args: { data: { estimateId: id } } }),
       credentials: "include",
     }).then(r => r.json()).then(d => { if (d) setTimeSummary(d); });
+  };
+
+  const handleCreateExpense = async () => {
+    if (!expenseAmount || parseFloat(expenseAmount) <= 0) return;
+    setSavingExpense(true);
+    try {
+      const res = await fetch("/api/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          function: "expenses.createExpense",
+          args: { data: { estimateId: id, description: expenseDesc, amount: parseFloat(expenseAmount), category: expenseCategory, vendor: expenseVendor, expenseDate, notes: expenseNotes } },
+        }),
+        credentials: "include",
+      });
+      const d = await res.json();
+      if (d.error) throw new Error(d.error);
+      setExpenseDesc(""); setExpenseAmount(""); setExpenseCategory("materials"); setExpenseVendor("");
+      setExpenseDate(new Date().toISOString().slice(0, 10)); setExpenseNotes("");
+      setShowExpenseForm(false);
+      // Refresh
+      const [expRes, sumRes] = await Promise.all([
+        fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "expenses.listExpenses", args: { data: { estimateId: id } } }), credentials: "include" }).then(r => r.json()),
+        fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "expenses.getExpenseSummary", args: { data: { estimateId: id } } }), credentials: "include" }).then(r => r.json()),
+      ]);
+      if (expRes?.expenses) setExpenses(expRes.expenses);
+      if (sumRes) setExpenseSummary(sumRes);
+    } catch (e: any) {
+      alert("Failed: " + (e.message || "Unknown error"));
+    } finally { setSavingExpense(false); }
+  };
+
+  const handleDeleteExpense = async (expenseId: string) => {
+    if (!confirm("Delete this expense?")) return;
+    await fetch("/api/call", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ function: "expenses.deleteExpense", args: { data: { id: expenseId } } }),
+      credentials: "include",
+    });
+    setExpenses(prev => prev.filter(e => e.id !== expenseId));
+    // Refresh summary
+    fetch("/api/call", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ function: "expenses.getExpenseSummary", args: { data: { estimateId: id } } }),
+      credentials: "include",
+    }).then(r => r.json()).then(d => { if (d) setExpenseSummary(d); });
   };
 
   const handleSaveVersion = async () => {
@@ -576,6 +649,120 @@ function EstimateDetail() {
         )}
       </div>
 
+      {/* Expense Tracking Section */}
+      <div className="mt-6 rounded-xl border border-gray-200 p-6 dark:border-gray-800">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-lg">Expense Tracking</h3>
+          <button onClick={() => setShowExpenseForm(!showExpenseForm)} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700">
+            {showExpenseForm ? "Cancel" : "Add Expense"}
+          </button>
+        </div>
+        {expenseSummary && (
+          <div className="mb-4 space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-900">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Est. Total</p>
+                <p className="text-lg font-bold text-gray-700 dark:text-gray-300">${expenseSummary.estimatedTotal.toFixed(2)}</p>
+              </div>
+              <div className="rounded-lg bg-emerald-50 p-3 dark:bg-emerald-950/30">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Actual</p>
+                <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">${expenseSummary.totalExpenses.toFixed(2)}</p>
+              </div>
+              <div className={`rounded-lg p-3 ${expenseSummary.variance >= 0 ? 'bg-green-50 dark:bg-green-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{expenseSummary.variance >= 0 ? 'Under' : 'Over'} Budget</p>
+                <p className={`text-lg font-bold ${expenseSummary.variance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  ${Math.abs(expenseSummary.variance).toFixed(2)}
+                </p>
+              </div>
+            </div>
+            {expenseSummary.byCategory?.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {expenseSummary.byCategory.map((c: any) => (
+                  <span key={c.category} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                    {c.category}: ${c.total.toFixed(2)} ({c.count})
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {showExpenseForm && (
+          <div className="mb-4 rounded-lg border border-gray-200 p-4 dark:border-gray-700 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Amount ($)</label>
+                <input type="number" value={expenseAmount} onChange={e => setExpenseAmount(e.target.value)} step="0.01" min="0" placeholder="0.00" className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-emerald-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Category</label>
+                <select value={expenseCategory} onChange={e => setExpenseCategory(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-emerald-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800">
+                  <option value="materials">Materials</option>
+                  <option value="labor">Labor</option>
+                  <option value="equipment">Equipment</option>
+                  <option value="permits">Permits</option>
+                  <option value="subcontractor">Subcontractor</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Vendor</label>
+                <input type="text" value={expenseVendor} onChange={e => setExpenseVendor(e.target.value)} placeholder="Supplier name" className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-emerald-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Date</label>
+                <input type="date" value={expenseDate} onChange={e => setExpenseDate(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-emerald-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800" />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Description</label>
+              <input type="text" value={expenseDesc} onChange={e => setExpenseDesc(e.target.value)} placeholder="What was purchased" className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-emerald-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Notes</label>
+              <input type="text" value={expenseNotes} onChange={e => setExpenseNotes(e.target.value)} placeholder="Optional notes" className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-emerald-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800" />
+            </div>
+            <button onClick={handleCreateExpense} disabled={savingExpense || !expenseAmount} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+              {savingExpense ? "Saving..." : "Add Expense"}
+            </button>
+          </div>
+        )}
+        {expenses.length > 0 ? (
+          <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-950">
+                <tr>
+                  <th className="px-3 py-2 font-medium text-gray-600 dark:text-gray-400">Date</th>
+                  <th className="px-3 py-2 font-medium text-gray-600 dark:text-gray-400">Category</th>
+                  <th className="px-3 py-2 font-medium text-gray-600 dark:text-gray-400">Description</th>
+                  <th className="px-3 py-2 font-medium text-gray-600 dark:text-gray-400">Vendor</th>
+                  <th className="px-3 py-2 font-medium text-gray-600 dark:text-gray-400 text-right">Amount</th>
+                  <th className="px-3 py-2 w-16"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                {expenses.map((e: any) => (
+                  <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-gray-950">
+                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{new Date(e.expense_date).toLocaleDateString()}</td>
+                    <td className="px-3 py-2">
+                      <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                        {e.category}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-gray-800 dark:text-gray-200 max-w-[200px] truncate">{e.description || "\u2014"}</td>
+                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{e.vendor || "\u2014"}</td>
+                    <td className="px-3 py-2 text-right font-medium">${Number(e.amount).toFixed(2)}</td>
+                    <td className="px-3 py-2 text-right"><button onClick={() => handleDeleteExpense(e.id)} className="text-xs text-red-600 hover:text-red-500">Del</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 dark:text-gray-500">No expenses logged yet.</p>
+        )}
+      </div>
       <div className="mt-6 flex items-center gap-3 rounded-lg border border-gray-200 p-4 dark:border-gray-800">
         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Tax Rate (%):</label>
         <input
