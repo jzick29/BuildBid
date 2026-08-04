@@ -28,6 +28,7 @@ import { Route as IntegrationsRouteImport } from './routes/integrations'
 import { Route as ImportRouteImport } from './routes/import'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as EstimatesRouteImport } from './routes/estimates'
+import { Route as DownloadFreeEstimatingTemplateRouteImport } from './routes/download-free-estimating-template'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CustomersRouteImport } from './routes/customers'
 import { Route as ContractsRouteImport } from './routes/contracts'
@@ -37,6 +38,8 @@ import { Route as AutomationRouteImport } from './routes/automation'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as FreeEstimatingTemplatePdfIndexRouteImport } from './routes/free-estimating-template-pdf/index'
+import { Route as EstimatesIndexRouteImport } from './routes/estimates.index'
 import { Route as TradeSlugRouteImport } from './routes/trade.$slug'
 import { Route as SubscribeSuccessRouteImport } from './routes/subscribe.success'
 import { Route as SubscribeCancelRouteImport } from './routes/subscribe.cancel'
@@ -47,6 +50,7 @@ import { Route as EstimatesNewRouteImport } from './routes/estimates.new'
 import { Route as EstimatesIdRouteImport } from './routes/estimates.$id'
 import { Route as ContractsIdRouteImport } from './routes/contracts.$id'
 import { Route as CoIdRouteImport } from './routes/co.$id'
+import { Route as ChangeOrdersIdRouteImport } from './routes/change-orders.$id'
 
 const TemplatesRoute = TemplatesRouteImport.update({
   id: '/templates',
@@ -143,6 +147,12 @@ const EstimatesRoute = EstimatesRouteImport.update({
   path: '/estimates',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DownloadFreeEstimatingTemplateRoute =
+  DownloadFreeEstimatingTemplateRouteImport.update({
+    id: '/download-free-estimating-template',
+    path: '/download-free-estimating-template',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -187,6 +197,17 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const FreeEstimatingTemplatePdfIndexRoute =
+  FreeEstimatingTemplatePdfIndexRouteImport.update({
+    id: '/free-estimating-template-pdf/',
+    path: '/free-estimating-template-pdf/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const EstimatesIndexRoute = EstimatesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => EstimatesRoute,
 } as any)
 const TradeSlugRoute = TradeSlugRouteImport.update({
   id: '/trade/$slug',
@@ -238,6 +259,11 @@ const CoIdRoute = CoIdRouteImport.update({
   path: '/co/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ChangeOrdersIdRoute = ChangeOrdersIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => ChangeOrdersRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -245,10 +271,11 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AnalyticsRoute
   '/automation': typeof AutomationRoute
   '/blog': typeof BlogRoute
-  '/change-orders': typeof ChangeOrdersRoute
+  '/change-orders': typeof ChangeOrdersRouteWithChildren
   '/contracts': typeof ContractsRouteWithChildren
   '/customers': typeof CustomersRoute
   '/dashboard': typeof DashboardRoute
+  '/download-free-estimating-template': typeof DownloadFreeEstimatingTemplateRoute
   '/estimates': typeof EstimatesRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/import': typeof ImportRoute
@@ -268,6 +295,7 @@ export interface FileRoutesByFullPath {
   '/subscribe': typeof SubscribeRouteWithChildren
   '/team': typeof TeamRoute
   '/templates': typeof TemplatesRoute
+  '/change-orders/$id': typeof ChangeOrdersIdRoute
   '/co/$id': typeof CoIdRoute
   '/contracts/$id': typeof ContractsIdRoute
   '/estimates/$id': typeof EstimatesIdRoute
@@ -278,6 +306,8 @@ export interface FileRoutesByFullPath {
   '/subscribe/cancel': typeof SubscribeCancelRoute
   '/subscribe/success': typeof SubscribeSuccessRoute
   '/trade/$slug': typeof TradeSlugRoute
+  '/estimates/': typeof EstimatesIndexRoute
+  '/free-estimating-template-pdf/': typeof FreeEstimatingTemplatePdfIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -285,11 +315,11 @@ export interface FileRoutesByTo {
   '/analytics': typeof AnalyticsRoute
   '/automation': typeof AutomationRoute
   '/blog': typeof BlogRoute
-  '/change-orders': typeof ChangeOrdersRoute
+  '/change-orders': typeof ChangeOrdersRouteWithChildren
   '/contracts': typeof ContractsRouteWithChildren
   '/customers': typeof CustomersRoute
   '/dashboard': typeof DashboardRoute
-  '/estimates': typeof EstimatesRouteWithChildren
+  '/download-free-estimating-template': typeof DownloadFreeEstimatingTemplateRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/import': typeof ImportRoute
   '/integrations': typeof IntegrationsRoute
@@ -308,6 +338,7 @@ export interface FileRoutesByTo {
   '/subscribe': typeof SubscribeRouteWithChildren
   '/team': typeof TeamRoute
   '/templates': typeof TemplatesRoute
+  '/change-orders/$id': typeof ChangeOrdersIdRoute
   '/co/$id': typeof CoIdRoute
   '/contracts/$id': typeof ContractsIdRoute
   '/estimates/$id': typeof EstimatesIdRoute
@@ -318,6 +349,8 @@ export interface FileRoutesByTo {
   '/subscribe/cancel': typeof SubscribeCancelRoute
   '/subscribe/success': typeof SubscribeSuccessRoute
   '/trade/$slug': typeof TradeSlugRoute
+  '/estimates': typeof EstimatesIndexRoute
+  '/free-estimating-template-pdf': typeof FreeEstimatingTemplatePdfIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -326,10 +359,11 @@ export interface FileRoutesById {
   '/analytics': typeof AnalyticsRoute
   '/automation': typeof AutomationRoute
   '/blog': typeof BlogRoute
-  '/change-orders': typeof ChangeOrdersRoute
+  '/change-orders': typeof ChangeOrdersRouteWithChildren
   '/contracts': typeof ContractsRouteWithChildren
   '/customers': typeof CustomersRoute
   '/dashboard': typeof DashboardRoute
+  '/download-free-estimating-template': typeof DownloadFreeEstimatingTemplateRoute
   '/estimates': typeof EstimatesRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/import': typeof ImportRoute
@@ -349,6 +383,7 @@ export interface FileRoutesById {
   '/subscribe': typeof SubscribeRouteWithChildren
   '/team': typeof TeamRoute
   '/templates': typeof TemplatesRoute
+  '/change-orders/$id': typeof ChangeOrdersIdRoute
   '/co/$id': typeof CoIdRoute
   '/contracts/$id': typeof ContractsIdRoute
   '/estimates/$id': typeof EstimatesIdRoute
@@ -359,6 +394,8 @@ export interface FileRoutesById {
   '/subscribe/cancel': typeof SubscribeCancelRoute
   '/subscribe/success': typeof SubscribeSuccessRoute
   '/trade/$slug': typeof TradeSlugRoute
+  '/estimates/': typeof EstimatesIndexRoute
+  '/free-estimating-template-pdf/': typeof FreeEstimatingTemplatePdfIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -372,6 +409,7 @@ export interface FileRouteTypes {
     | '/contracts'
     | '/customers'
     | '/dashboard'
+    | '/download-free-estimating-template'
     | '/estimates'
     | '/forgot-password'
     | '/import'
@@ -391,6 +429,7 @@ export interface FileRouteTypes {
     | '/subscribe'
     | '/team'
     | '/templates'
+    | '/change-orders/$id'
     | '/co/$id'
     | '/contracts/$id'
     | '/estimates/$id'
@@ -401,6 +440,8 @@ export interface FileRouteTypes {
     | '/subscribe/cancel'
     | '/subscribe/success'
     | '/trade/$slug'
+    | '/estimates/'
+    | '/free-estimating-template-pdf/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -412,7 +453,7 @@ export interface FileRouteTypes {
     | '/contracts'
     | '/customers'
     | '/dashboard'
-    | '/estimates'
+    | '/download-free-estimating-template'
     | '/forgot-password'
     | '/import'
     | '/integrations'
@@ -431,6 +472,7 @@ export interface FileRouteTypes {
     | '/subscribe'
     | '/team'
     | '/templates'
+    | '/change-orders/$id'
     | '/co/$id'
     | '/contracts/$id'
     | '/estimates/$id'
@@ -441,6 +483,8 @@ export interface FileRouteTypes {
     | '/subscribe/cancel'
     | '/subscribe/success'
     | '/trade/$slug'
+    | '/estimates'
+    | '/free-estimating-template-pdf'
   id:
     | '__root__'
     | '/'
@@ -452,6 +496,7 @@ export interface FileRouteTypes {
     | '/contracts'
     | '/customers'
     | '/dashboard'
+    | '/download-free-estimating-template'
     | '/estimates'
     | '/forgot-password'
     | '/import'
@@ -471,6 +516,7 @@ export interface FileRouteTypes {
     | '/subscribe'
     | '/team'
     | '/templates'
+    | '/change-orders/$id'
     | '/co/$id'
     | '/contracts/$id'
     | '/estimates/$id'
@@ -481,6 +527,8 @@ export interface FileRouteTypes {
     | '/subscribe/cancel'
     | '/subscribe/success'
     | '/trade/$slug'
+    | '/estimates/'
+    | '/free-estimating-template-pdf/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -489,10 +537,11 @@ export interface RootRouteChildren {
   AnalyticsRoute: typeof AnalyticsRoute
   AutomationRoute: typeof AutomationRoute
   BlogRoute: typeof BlogRoute
-  ChangeOrdersRoute: typeof ChangeOrdersRoute
+  ChangeOrdersRoute: typeof ChangeOrdersRouteWithChildren
   ContractsRoute: typeof ContractsRouteWithChildren
   CustomersRoute: typeof CustomersRoute
   DashboardRoute: typeof DashboardRoute
+  DownloadFreeEstimatingTemplateRoute: typeof DownloadFreeEstimatingTemplateRoute
   EstimatesRoute: typeof EstimatesRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   ImportRoute: typeof ImportRoute
@@ -515,6 +564,7 @@ export interface RootRouteChildren {
   CoIdRoute: typeof CoIdRoute
   SignEstimateIdRoute: typeof SignEstimateIdRoute
   TradeSlugRoute: typeof TradeSlugRoute
+  FreeEstimatingTemplatePdfIndexRoute: typeof FreeEstimatingTemplatePdfIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -652,6 +702,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EstimatesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/download-free-estimating-template': {
+      id: '/download-free-estimating-template'
+      path: '/download-free-estimating-template'
+      fullPath: '/download-free-estimating-template'
+      preLoaderRoute: typeof DownloadFreeEstimatingTemplateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -714,6 +771,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/free-estimating-template-pdf/': {
+      id: '/free-estimating-template-pdf/'
+      path: '/free-estimating-template-pdf'
+      fullPath: '/free-estimating-template-pdf/'
+      preLoaderRoute: typeof FreeEstimatingTemplatePdfIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/estimates/': {
+      id: '/estimates/'
+      path: '/'
+      fullPath: '/estimates/'
+      preLoaderRoute: typeof EstimatesIndexRouteImport
+      parentRoute: typeof EstimatesRoute
     }
     '/trade/$slug': {
       id: '/trade/$slug'
@@ -785,8 +856,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CoIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/change-orders/$id': {
+      id: '/change-orders/$id'
+      path: '/$id'
+      fullPath: '/change-orders/$id'
+      preLoaderRoute: typeof ChangeOrdersIdRouteImport
+      parentRoute: typeof ChangeOrdersRoute
+    }
   }
 }
+
+interface ChangeOrdersRouteChildren {
+  ChangeOrdersIdRoute: typeof ChangeOrdersIdRoute
+}
+
+const ChangeOrdersRouteChildren: ChangeOrdersRouteChildren = {
+  ChangeOrdersIdRoute: ChangeOrdersIdRoute,
+}
+
+const ChangeOrdersRouteWithChildren = ChangeOrdersRoute._addFileChildren(
+  ChangeOrdersRouteChildren,
+)
 
 interface ContractsRouteChildren {
   ContractsIdRoute: typeof ContractsIdRoute
@@ -803,11 +893,13 @@ const ContractsRouteWithChildren = ContractsRoute._addFileChildren(
 interface EstimatesRouteChildren {
   EstimatesIdRoute: typeof EstimatesIdRoute
   EstimatesNewRoute: typeof EstimatesNewRoute
+  EstimatesIndexRoute: typeof EstimatesIndexRoute
 }
 
 const EstimatesRouteChildren: EstimatesRouteChildren = {
   EstimatesIdRoute: EstimatesIdRoute,
   EstimatesNewRoute: EstimatesNewRoute,
+  EstimatesIndexRoute: EstimatesIndexRoute,
 }
 
 const EstimatesRouteWithChildren = EstimatesRoute._addFileChildren(
@@ -848,10 +940,11 @@ const rootRouteChildren: RootRouteChildren = {
   AnalyticsRoute: AnalyticsRoute,
   AutomationRoute: AutomationRoute,
   BlogRoute: BlogRoute,
-  ChangeOrdersRoute: ChangeOrdersRoute,
+  ChangeOrdersRoute: ChangeOrdersRouteWithChildren,
   ContractsRoute: ContractsRouteWithChildren,
   CustomersRoute: CustomersRoute,
   DashboardRoute: DashboardRoute,
+  DownloadFreeEstimatingTemplateRoute: DownloadFreeEstimatingTemplateRoute,
   EstimatesRoute: EstimatesRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
   ImportRoute: ImportRoute,
@@ -874,6 +967,7 @@ const rootRouteChildren: RootRouteChildren = {
   CoIdRoute: CoIdRoute,
   SignEstimateIdRoute: SignEstimateIdRoute,
   TradeSlugRoute: TradeSlugRoute,
+  FreeEstimatingTemplatePdfIndexRoute: FreeEstimatingTemplatePdfIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
