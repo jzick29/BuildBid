@@ -7,6 +7,9 @@ import {
 } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { AnalyticsScripts } from "~/components/AnalyticsScripts";
+import { BottomNav } from "~/components/BottomNav";
+import { OfflineBanner } from "~/components/OfflineBanner";
+import { InstallPrompt } from "~/components/InstallPrompt";
 import { useState, useEffect } from "react";
 
 import appCss from "~/styles/app.css?url";
@@ -120,12 +123,14 @@ function RootComponent() {
 
   return (
     <RootDocument>
+      <OfflineBanner />
       {showNav && <DesktopNav />}
       <div className="flex min-h-dvh flex-col">
         <main className={`flex-1 pb-safe ${showNav ? "sm:ml-56" : ""}`}>
           <Outlet />
         </main>
-        {showNav && <MobileNav />}
+        {showNav && <BottomNav />}
+        <InstallPrompt />
       </div>
     </RootDocument>
   );
@@ -306,16 +311,6 @@ function RootDocument({ children }: { children: ReactNode }) {
       <body className="pb-16 sm:pb-0">
         {children}
         <Scripts />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
-    });
-  }`,
-          }}
-        />
       </body>
     </html>
   );

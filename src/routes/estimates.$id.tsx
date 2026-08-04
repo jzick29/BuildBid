@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect, useCallback } from "react";
 import { SignaturePad } from "~/components/SignaturePad";
+import { MobileEstimateActions } from "~/components/MobileEstimateActions";
 
 export const Route = createFileRoute("/estimates/$id")({
   loader: async () => ({}),
@@ -467,9 +468,12 @@ function EstimateDetail() {
   if (error) return <div className="flex min-h-dvh items-center justify-center"><p className="text-red-500">{error}</p></div>;
   if (!user || !estimate) return null;
 
-  return (
+return (
     <div className="mx-auto max-w-6xl px-6 py-12">
-      <Link to="/estimates" className="text-sm text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">&larr; Back to estimates</Link>
+      <div className="flex items-center gap-3"><Link to="/estimates" className="text-sm text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">&larr; Back to estimates</Link></div>
+      <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
+        <MobileEstimateActions onSign={scrollToSignature} onAddTime={() => setShowTimeForm(!showTimeForm)} onAddExpense={() => setShowExpenseForm(!showExpenseForm)} />
+      </div>
       <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{estimate.project_name}</h1>

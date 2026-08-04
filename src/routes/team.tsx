@@ -20,7 +20,7 @@ function TeamPage() {
       setUser(me.user);
       const tRes = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "team.getTeamMembers", args: {} }), credentials: "include" });
       const t = await tRes.json();
-      setMembers(t);
+      setMembers(t.members || []);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   };

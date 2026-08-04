@@ -357,6 +357,7 @@ function Home() {
               <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Resources</h4>
               <ul className="mt-3 space-y-2 text-sm text-gray-500 dark:text-gray-400">
                 <li><Link to="/blog" className="hover:text-indigo-600 dark:hover:text-indigo-400">Blog</Link></li>
+                <li><Link to="/download-free-estimating-template" className="hover:text-indigo-600 dark:hover:text-indigo-400">Free Estimating Template</Link></li>
                 <li><a href="#faq" className="hover:text-indigo-600 dark:hover:text-indigo-400">FAQ</a></li>
                 <li><a href="#features" className="hover:text-indigo-600 dark:hover:text-indigo-400">Features</a></li>
               </ul>

@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
+import RecurringSection from "../components/RecurringSection";
 
 export const Route = createFileRoute("/invoices")({ component: InvoicesPage });
 
@@ -261,7 +262,7 @@ function InvoicesPage() {
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
                 {filteredInvoices.map((inv: any) => (
-                  <tr key={inv.id} className="hover:bg-gray-50 dark:hover:bg-gray-950">
+                  <tr key={inv.id} className="hover:bg-gray-50 dark:hover:bg-gray-950 cursor-pointer" onClick={() => router.navigate({ to: "/invoices/$id", params: { id: inv.id } })}>
                     <td className="px-4 py-3 font-medium">{inv.invoice_number}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{inv.project_name || "—"}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{inv.customer_name || "—"}</td>
@@ -360,6 +361,8 @@ function InvoicesPage() {
           </div>
         </div>
       )}
+      {/* Recurring Invoices Section */}
+      <RecurringSection />
     </div>
   );
 }

@@ -38,7 +38,7 @@ function AnalyticsPage() {
   if (error) return <div className="flex min-h-dvh items-center justify-center"><div className="text-center"><p className="text-red-500">Error: {error}</p><button onClick={() => window.location.reload()} className="mt-4 text-indigo-600 underline">Retry</button></div></div>;
   if (!user || !data) return null;
 
-  const { totalEstimates, wonCount, lostCount, winRate, avgMarkup, totalRevenue, byTrade, byMonth, recentWins } = data;
+  const { totalEstimates, wonCount, lostCount, winRate, avgMarkup, totalRevenue, byTrade, byMonth, recentWins, pipelineCount, pipelineValue } = data;
   const maxWinRate = Math.max(...(byTrade||[]).map((t: any) => t.win_rate), 1);
 
   // Key metrics
@@ -82,6 +82,22 @@ function AnalyticsPage() {
             <p className="text-xs text-gray-500">{wonCount} of {totalEstimates} estimates</p>
           </div>
         </div>
+
+        {/* Pipeline */}
+        {pipelineCount > 0 && (
+          <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-900 dark:bg-blue-950/30">
+            <div className="flex items-center gap-4">
+              <div>
+                <p className="text-xs font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wide">Active Pipeline</p>
+                <p className="text-2xl font-bold text-blue-800 dark:text-blue-200">${Number(pipelineValue).toLocaleString()}</p>
+              </div>
+              <div className="text-sm text-blue-600 dark:text-blue-400">
+                <p className="font-semibold">{pipelineCount} estimate{pipelineCount !== 1 ? "s" : ""}</p>
+                <p className="text-xs">in progress</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"><p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Estimates</p><p className="mt-2 text-3xl font-bold">{totalEstimates}</p></div>

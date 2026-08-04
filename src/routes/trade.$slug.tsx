@@ -83,6 +83,90 @@ const TRADE_INFO: Record<string, TradeInfo> = {
     ctaTitle: "Estimate every type of job with confidence",
     ctaBody: "6 general contracting templates plus 16 more across 4 specialty trades. The most comprehensive template library for trade contractors.",
   },
+  "concrete-estimating": {
+    slug: "concrete-estimating",
+    tradeType: "concrete",
+    title: "Concrete Estimating Software",
+    subtitle: "Accurate concrete bids for flatwork, foundations, driveways, and decorative concrete — fast and precise.",
+    description: "Concrete estimating is all about yards, square footage, and labor. BuildBid's templates for driveways, patios, sidewalks, foundations, and stamped concrete handle the material calculations so you price every job accurately — from the first yard to the last broom finish.",
+    valueProps: [
+      { icon: "🧱", title: "Pre-built concrete assemblies", desc: "Driveways, patios, slab foundations, stamped concrete, and retaining walls — with real mix pricing and labor estimates." },
+      { icon: "🧮", title: "Automatic yardage calculations", desc: "Enter dimensions and the template calculates concrete yards, rebar, wire mesh, forms, and finishing labor." },
+      { icon: "📋", title: "Professional proposals that close", desc: "Turn your concrete takeoff into a branded, customer-ready proposal with line items, terms, and digital signature." },
+    ],
+    ctaTitle: "Pour more profit into every concrete job",
+    ctaBody: "Estimate driveways, patios, and foundations in under 30 minutes. Start your free trial — no credit card needed.",
+  },
+  "drywall-estimating": {
+    slug: "drywall-estimating",
+    tradeType: "drywall",
+    title: "Drywall Estimating Software",
+    subtitle: "Price drywall jobs by the sheet with pre-built assemblies for hanging, taping, and finishing.",
+    description: "Drywall estimating lives and dies by the board count. BuildBid's templates for standard 1/2-inch, 5/8-inch fire-rated, moisture-resistant, and soundproof drywall have the sheets, screws, tape, mud, corner bead, and labor rates pre-loaded — so your takeoff becomes a finished estimate in minutes.",
+    valueProps: [
+      { icon: "📐", title: "Pre-built drywall assemblies", desc: "Standard 1/2-inch walls, 5/8-inch fire-rated, green board moisture-resistant, and soundproof assemblies — with screws, tape, and mud included." },
+      { icon: "🔢", title: "Board count and labor calculator", desc: "Enter wall and ceiling square footage — the template calculates board count, fasteners, bead, and hanging/finishing labor." },
+      { icon: "📄", title: "Scope of work included", desc: "Every proposal spells out what's included: hang, tape, texture, sanding. No disputes about scope after the fact." },
+    ],
+    ctaTitle: "Stop counting sheets by hand — estimate drywall in minutes",
+    ctaBody: "Pre-built drywall templates with real material pricing and labor rates. Start your free trial today.",
+  },
+  "landscaping-estimating": {
+    slug: "landscaping-estimating",
+    tradeType: "landscaping",
+    title: "Landscaping Estimating Software",
+    subtitle: "Estimate landscaping, hardscaping, irrigation, and lawn care with professional templates.",
+    description: "Landscaping estimates span a huge range — from $500 mulch jobs to $50,000 paver patios with irrigation and lighting. BuildBid's templates for lawn installation, planting beds, paver patios, retaining walls, and irrigation systems give you flexible starting points that scale from small residential to large commercial projects.",
+    valueProps: [
+      { icon: "🌿", title: "Pre-built landscaping assemblies", desc: "Sod installation, planting beds, paver patios, retaining walls, irrigation systems, and landscape lighting — priced and ready." },
+      { icon: "📏", title: "Per-square-foot pricing made easy", desc: "Set your price per square foot for sod, mulch, gravel, and pavers — the template handles the math for any project size." },
+      { icon: "📸", title: "Photo-ready proposals", desc: "Include before/after photos and plant lists in your proposals. Show customers exactly what they're paying for." },
+    ],
+    ctaTitle: "Grow your landscaping business with professional estimating",
+    ctaBody: "From lawn care to hardscapes — estimate every job with confidence. Start your free 14-day trial.",
+  },
+  "painting-estimating": {
+    slug: "painting-estimating",
+    tradeType: "painting",
+    title: "Painting Estimating Software",
+    subtitle: "Price painting jobs with confidence — from single rooms to full commercial buildings.",
+    description: "Painting estimates are all about square footage, surface prep, and coatings. BuildBid's templates for interior painting, exterior painting, cabinet refinishing, and commercial painting handle the math — wall area, ceiling area, trim linear feet, coating gallons — so your estimates are fast, accurate, and professional.",
+    valueProps: [
+      { icon: "🎨", title: "Pre-built painting assemblies", desc: "Interior rooms, full exteriors, cabinet refinishing, and commercial tenant improvements — with real coating coverage rates and labor estimates." },
+      { icon: "📐", title: "Automatic square footage calculations", desc: "Enter room dimensions and the template calculates wall and ceiling area, trim linear feet, and gallon requirements. No more manual math." },
+      { icon: "📋", title: "Detailed scope of work in every proposal", desc: "Surface prep, primer coats, finish coats, sheen levels — spelled out so customers know exactly what they're paying for." },
+    ],
+    ctaTitle: "Stop estimating painting jobs on napkins — go pro in 14 days free",
+    ctaBody: "Pre-built painting templates with current coating pricing and realistic labor rates. Start your free trial now.",
+  },
+  "flooring-estimating": {
+    slug: "flooring-estimating",
+    tradeType: "flooring",
+    title: "Flooring Estimating Software",
+    subtitle: "Estimate hardwood, tile, carpet, LVP, and refinishing jobs with pre-built templates.",
+    description: "Flooring estimates need to account for material, underlayment, transitions, baseboards, and waste — plus labor for demo, prep, and installation. BuildBid's templates for hardwood, tile, luxury vinyl plank, carpet, and refinishing handle all of it so every bid is accurate from the first square foot to the last transition strip.",
+    valueProps: [
+      { icon: "🪵", title: "Pre-built flooring assemblies", desc: "Solid hardwood, engineered wood, ceramic tile, LVP, carpet, and sand-and-refinish — with underlayment, transitions, and baseboards included." },
+      { icon: "🧮", title: "Waste factor built in", desc: "Templates automatically add 5–20% material waste based on flooring type and layout pattern. No more running short on the last row." },
+      { icon: "📄", title: "Line-item transparency", desc: "Every proposal shows material per square foot, labor per square foot, and separate line items for demo, prep, and trim work. Customers see the value." },
+    ],
+    ctaTitle: "Price every flooring job down to the square foot",
+    ctaBody: "From carpet to hardwood — estimate flooring jobs in minutes, not hours. Start your free 14-day trial.",
+  },
+  "framing-carpentry-estimating": {
+    slug: "framing-carpentry-estimating",
+    tradeType: "framing",
+    title: "Framing & Carpentry Estimating Software",
+    subtitle: "Estimate framing, finish carpentry, decks, and millwork with accurate material and labor calculations.",
+    description: "Framing and carpentry estimates involve hundreds of individual pieces — studs, plates, headers, joists, rafters, sheathing, trim, and hardware. BuildBid's templates for wall framing, floor systems, roof framing, deck construction, and finish carpentry organize every piece so nothing gets left out of the bid.",
+    valueProps: [
+      { icon: "🪚", title: "Pre-built framing assemblies", desc: "Wall framing (per linear foot), floor joist systems, roof truss packages, deck framing, and interior trim packages — with real lumber pricing." },
+      { icon: "📏", title: "Component-level material lists", desc: "Every 2x4, sheet of sheathing, pound of nails, and tube of adhesive is counted. Templates generate complete material lists you can hand to your supplier." },
+      { icon: "📑", title: "Labor by the piece", desc: "Set labor rates per stud, per sheet, per linear foot of trim — and the template calculates total labor automatically. Consistent pricing on every bid." },
+    ],
+    ctaTitle: "Frame every estimate with confidence — from rough to finish",
+    ctaBody: "Pre-built framing and carpentry templates for the most common residential and light commercial projects. Start your free trial.",
+  },
 };
 
 export const Route = createFileRoute("/trade/$slug")({
@@ -149,6 +233,12 @@ function TradeLanding() {
     hvac: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
     roofing: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
     general: "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300",
+    concrete: "bg-stone-100 text-stone-800 dark:bg-stone-950 dark:text-stone-300",
+    drywall: "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300",
+    landscaping: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
+    painting: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300",
+    flooring: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+    framing: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
   };
 
   return (

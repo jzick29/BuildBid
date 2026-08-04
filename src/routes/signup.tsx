@@ -1,6 +1,17 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 
+function getUtmSource(): string {
+  if (typeof window === "undefined") return "";
+  const params = new URLSearchParams(window.location.search);
+  const parts: string[] = [];
+  for (const key of ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"]) {
+    const val = params.get(key);
+    if (val) parts.push(`${key}=${encodeURIComponent(val)}`);
+  }
+  return parts.join("&");
+}
+
 export const Route = createFileRoute("/signup")({
   component: SignupPage,
 });
@@ -21,7 +32,7 @@ function SignupPage() {
       const res = await fetch("/api/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, name }),
+        body: JSON.stringify({ email, password, name, source: getUtmSource() }),
       });
       const data = await res.json();
       if (data.success) {
