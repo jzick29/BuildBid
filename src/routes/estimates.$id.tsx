@@ -42,6 +42,15 @@ function EstimateDetail() {
   const [showProposalForm, setShowProposalForm] = useState(false);
   const [signature, setSignature] = useState<any>(null);
   const [savingSignature, setSavingSignature] = useState(false);
+  // Time tracking
+  const [timeEntries, setTimeEntries] = useState<any[]>([]);
+  const [timeSummary, setTimeSummary] = useState<any>(null);
+  const [showTimeForm, setShowTimeForm] = useState(false);
+  const [timeDesc, setTimeDesc] = useState("");
+  const [timeHours, setTimeHours] = useState("");
+  const [timeCrew, setTimeCrew] = useState("");
+  const [timeDate, setTimeDate] = useState(new Date().toISOString().slice(0, 10));
+  const [savingTime, setSavingTime] = useState(false);
   const [signedByName, setSignedByName] = useState("");
 
   const loadData = useCallback(async () => {
@@ -88,12 +97,26 @@ function EstimateDetail() {
             body: JSON.stringify({ function: "proposals.getProposals", args: { data: { estimateId: id } } }),
             credentials: "include",
           }).then(r => r.json()),
+          fetch("/api/call", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ function: "timeEntries.listTimeEntries", args: { data: { estimateId: id } } }),
+            credentials: "include",
+          }).then(r => r.json()),
+          fetch("/api/call", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ function: "timeEntries.getTimeSummary", args: { data: { estimateId: id } } }),
+            credentials: "include",
+          }).then(r => r.json()),
         ]);
       })
-      .then(([_est, mpData, verData, propData]) => {
+      .then(([_est, mpData, verData, propData, teData, tsData]) => {
         if (mpData?.presets) setMarkupPresets(mpData.presets);
         if (verData?.versions) setVersions(verData.versions);
         if (propData?.proposals) setProposals(propData.proposals);
+        if (teData?.timeEntries) setTimeEntries(teData.timeEntries);
+        if (tsData) setTimeSummary(tsData);
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -203,6 +226,54 @@ function EstimateDetail() {
     } finally {
       setSavingSignature(false);
     }
+  };
+
+  const handleCreateTimeEntry = async () => {
+    if (!timeHours || parseFloat(timeHours) <= 0) return;
+    setSavingTime(true);
+    try {
+      const res = await fetch("/api/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          function: "timeEntries.createTimeEntry",
+          args: { data: { estimateId: id, description: timeDesc, hours: parseFloat(timeHours), crewMember: timeCrew, date: timeDate } },
+        }),
+        credentials: "include",
+      });
+      const d = await res.json();
+      if (d.error) throw new Error(d.error);
+      setTimeDesc(""); setTimeHours(""); setTimeCrew("");
+      setTimeDate(new Date().toISOString().slice(0, 10));
+      setShowTimeForm(false);
+      // Refresh
+      const [entriesRes, summaryRes] = await Promise.all([
+        fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "timeEntries.listTimeEntries", args: { data: { estimateId: id } } }), credentials: "include" }).then(r => r.json()),
+        fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "timeEntries.getTimeSummary", args: { data: { estimateId: id } } }), credentials: "include" }).then(r => r.json()),
+      ]);
+      if (entriesRes?.timeEntries) setTimeEntries(entriesRes.timeEntries);
+      if (summaryRes) setTimeSummary(summaryRes);
+    } catch (e: any) {
+      alert("Failed: " + (e.message || "Unknown error"));
+    } finally { setSavingTime(false); }
+  };
+
+  const handleDeleteTimeEntry = async (entryId: string) => {
+    if (!confirm("Delete this time entry?")) return;
+    await fetch("/api/call", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ function: "timeEntries.deleteTimeEntry", args: { data: { id: entryId } } }),
+      credentials: "include",
+    });
+    setTimeEntries(prev => prev.filter(e => e.id !== entryId));
+    // Refresh summary
+    fetch("/api/call", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ function: "timeEntries.getTimeSummary", args: { data: { estimateId: id } } }),
+      credentials: "include",
+    }).then(r => r.json()).then(d => { if (d) setTimeSummary(d); });
   };
 
   const handleSaveVersion = async () => {
@@ -428,6 +499,80 @@ function EstimateDetail() {
               <p className="mt-2 text-xs text-gray-500">Saving signature...</p>
             )}
           </div>
+        )}
+      </div>
+      {/* Time Tracking Section */}
+      <div className="mt-6 rounded-xl border border-gray-200 p-6 dark:border-gray-800">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-lg">Time Tracking</h3>
+          <button onClick={() => setShowTimeForm(!showTimeForm)} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700">
+            {showTimeForm ? "Cancel" : "Log Hours"}
+          </button>
+        </div>
+        {timeSummary && (
+          <div className="mb-4 grid grid-cols-2 gap-3">
+            <div className="rounded-lg bg-indigo-50 p-3 dark:bg-indigo-950/30">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Actual Hours</p>
+              <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{timeSummary.totalHours.toFixed(1)}</p>
+            </div>
+            <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-900">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Entries</p>
+              <p className="text-xl font-bold text-gray-700 dark:text-gray-300">{timeSummary.entryCount}</p>
+            </div>
+          </div>
+        )}
+        {showTimeForm && (
+          <div className="mb-4 rounded-lg border border-gray-200 p-4 dark:border-gray-700 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Hours</label>
+                <input type="number" value={timeHours} onChange={e => setTimeHours(e.target.value)} step="0.5" min="0" placeholder="2.5" className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Date</label>
+                <input type="date" value={timeDate} onChange={e => setTimeDate(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800" />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Crew Member</label>
+              <input type="text" value={timeCrew} onChange={e => setTimeCrew(e.target.value)} placeholder="Name" className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Description</label>
+              <input type="text" value={timeDesc} onChange={e => setTimeDesc(e.target.value)} placeholder="What was done" className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800" />
+            </div>
+            <button onClick={handleCreateTimeEntry} disabled={savingTime || !timeHours} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
+              {savingTime ? "Saving..." : "Log Hours"}
+            </button>
+          </div>
+        )}
+        {timeEntries.length > 0 ? (
+          <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-950">
+                <tr>
+                  <th className="px-3 py-2 font-medium text-gray-600 dark:text-gray-400">Date</th>
+                  <th className="px-3 py-2 font-medium text-gray-600 dark:text-gray-400">Crew</th>
+                  <th className="px-3 py-2 font-medium text-gray-600 dark:text-gray-400">Description</th>
+                  <th className="px-3 py-2 font-medium text-gray-600 dark:text-gray-400 text-right">Hours</th>
+                  <th className="px-3 py-2 w-16"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                {timeEntries.map((e: any) => (
+                  <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-gray-950">
+                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{new Date(e.date).toLocaleDateString()}</td>
+                    <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{e.crew_member || "\u2014"}</td>
+                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{e.description || "\u2014"}</td>
+                    <td className="px-3 py-2 text-right font-medium">{Number(e.hours).toFixed(1)}</td>
+                    <td className="px-3 py-2 text-right"><button onClick={() => handleDeleteTimeEntry(e.id)} className="text-xs text-red-600 hover:text-red-500">Del</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 dark:text-gray-500">No time entries logged yet.</p>
         )}
       </div>
 
