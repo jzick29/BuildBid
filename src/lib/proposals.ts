@@ -20,7 +20,7 @@ async function requireUser() {
 
 // Generate a branded PDF proposal for an estimate
 export const generateProposal = createServerFn({ method: "POST" })
-  .validator((d: unknown) => d as { estimateId: string; terms?: string })
+  .validator((d: unknown) => d as { estimateId: string; terms?: string; signatureDataUrl?: string })
   .handler(async ({ data }) => {
     const user = await requireUser();
     const mod = await import("./db.server");
@@ -43,7 +43,7 @@ export const generateProposal = createServerFn({ method: "POST" })
     );
     
     // Generate PDF
-    const pdfBytes = await generatePdf(user, est, items, proposalNumber, data.terms || "");
+    const pdfBytes = await generatePdf(user, est, items, proposalNumber, data.terms || "", data.signatureDataUrl);
     
     // Store PDF as base64 in the proposal record
     const pdfBase64 = Buffer.from(pdfBytes).toString("base64");
@@ -88,7 +88,8 @@ async function generatePdf(
   est: any,
   items: any[],
   proposalNumber: string,
-  terms: string
+  terms: string,
+  signatureDataUrl?: string
 ): Promise<Uint8Array> {
   const { PDFDocument, rgb, StandardFonts } = await import("pdf-lib");
   

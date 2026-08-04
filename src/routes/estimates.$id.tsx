@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect, useCallback } from "react";
+import { SignaturePad } from "~/components/SignaturePad";
 
 export const Route = createFileRoute("/estimates/$id")({
   loader: async () => ({}),
@@ -8,8 +9,8 @@ export const Route = createFileRoute("/estimates/$id")({
 
 function EstimateDetail() {
   const router = useRouter();
-  const params = router.params as { id: string } | undefined;
-  const id = params?.id;
+  const params = Route.useParams();
+  const id = params.id;
   if (!id) return null;
   const [user, setUser] = useState<any>(null);
   const [estimate, setEstimate] = useState<any>(null);
@@ -39,6 +40,9 @@ function EstimateDetail() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [proposals, setProposals] = useState<any[]>([]);
   const [showProposalForm, setShowProposalForm] = useState(false);
+  const [signature, setSignature] = useState<any>(null);
+  const [savingSignature, setSavingSignature] = useState(false);
+  const [signedByName, setSignedByName] = useState("");
 
   const loadData = useCallback(async () => {
     try {
@@ -171,6 +175,36 @@ function EstimateDetail() {
     }
   };
 
+  const handleSaveSignature = async (dataUrl: string) => {
+    setSavingSignature(true);
+    try {
+      const res = await fetch("/api/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          function: "signatures.saveSignature",
+          args: { data: { estimateId: id, signatureData: dataUrl, signedByName } },
+        }),
+        credentials: "include",
+      });
+      const d = await res.json();
+      if (d.error) throw new Error(d.error);
+      // Refresh signature
+      const sRes = await fetch("/api/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ function: "signatures.getSignature", args: { data: { estimateId: id } } }),
+        credentials: "include",
+      });
+      const sData = await sRes.json();
+      if (sData?.signature) setSignature(sData.signature);
+    } catch (e: any) {
+      alert("Failed to save signature: " + (e.message || "Unknown error"));
+    } finally {
+      setSavingSignature(false);
+    }
+  };
+
   const handleSaveVersion = async () => {
     setSavingVersion(true);
     const res = await fetch("/api/call", {
@@ -219,7 +253,7 @@ function EstimateDetail() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           function: "proposals.generateProposal",
-          args: { data: { estimateId: id, terms: proposalTerms } },
+          args: { data: { estimateId: id, terms: proposalTerms, signatureDataUrl: signature?.signature_data } },
         }),
         credentials: "include",
       });
@@ -344,6 +378,58 @@ function EstimateDetail() {
           </div>
         </div>
       )}
+      {/* Signature Section */}
+      <div className="mt-6 rounded-xl border border-gray-200 p-6 dark:border-gray-800">
+        <h3 className="font-semibold text-lg mb-2">Signature</h3>
+        {signature ? (
+          <div>
+            <SignaturePad
+              existingSignature={signature.signature_data}
+              readOnly={true}
+              width={500}
+              height={200}
+              onSave={() => {}}
+            />
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              Signed by <strong>{signature.signed_by_name || "Customer"}</strong> on{" "}
+              {new Date(signature.signed_at).toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </p>
+          </div>
+        ) : (
+          <div>
+            <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
+              Have your customer sign directly on the screen.
+            </p>
+            <div className="mb-3">
+              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                Signer Name
+              </label>
+              <input
+                type="text"
+                value={signedByName}
+                onChange={e => setSignedByName(e.target.value)}
+                placeholder="Customer name"
+                className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800"
+              />
+            </div>
+            <SignaturePad
+              onSave={handleSaveSignature}
+              onClear={() => setSignature(null)}
+              width={500}
+              height={200}
+            />
+            {savingSignature && (
+              <p className="mt-2 text-xs text-gray-500">Saving signature...</p>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="mt-6 flex items-center gap-3 rounded-lg border border-gray-200 p-4 dark:border-gray-800">
         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Tax Rate (%):</label>

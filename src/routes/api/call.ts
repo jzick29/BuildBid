@@ -28,6 +28,7 @@ import "~/lib/proposals";
 import "~/lib/push";
 import "~/lib/quickbooks";
 import "~/lib/scheduling";
+import "~/lib/signatures";
 import "~/lib/subscriptions";
 import "~/lib/team";
 import "~/lib/templates";
