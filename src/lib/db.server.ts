@@ -680,6 +680,7 @@ export async function getDb() {
   try { db.run("ALTER TABLE users ADD COLUMN trade TEXT DEFAULT ''"); } catch {}
   try { db.run("ALTER TABLE users ADD COLUMN phone TEXT DEFAULT ''"); } catch {}
   try { db.run("ALTER TABLE users ADD COLUMN onboarding_completed INTEGER NOT NULL DEFAULT 0"); } catch {}
+  try { db.run("ALTER TABLE users ADD COLUMN margin_threshold REAL NOT NULL DEFAULT 20"); } catch {}
   try { db.run("ALTER TABLE proposals ADD COLUMN pdf_data TEXT DEFAULT NULL"); } catch {}
   try { db.run("ALTER TABLE proposals ADD COLUMN sent_to_email TEXT DEFAULT NULL"); } catch {}
   try { db.run("ALTER TABLE proposals ADD COLUMN sent_at TEXT DEFAULT NULL"); } catch {}
