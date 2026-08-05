@@ -43,6 +43,18 @@ function TemplatesPage() {
   const [shareUrl, setShareUrl] = useState("");
   const [shareError, setShareError] = useState("");
 
+  // Publish to Marketplace
+  const [publishTemplate, setPublishTemplate] = useState<any>(null);
+  const [publishTitle, setPublishTitle] = useState("");
+  const [publishDesc, setPublishDesc] = useState("");
+  const [publishTrade, setPublishTrade] = useState("");
+  const [publishTags, setPublishTags] = useState("");
+  const [publishPrice, setPublishPrice] = useState("0");
+  const [publishError, setPublishError] = useState("");
+  const [publishDone, setPublishDone] = useState("");
+  const [publishListingId, setPublishListingId] = useState("");
+  const [publishing, setPublishing] = useState(false);
+
   // Import
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importPreview, setImportPreview] = useState<any>(null);
@@ -213,6 +225,36 @@ function TemplatesPage() {
     try { await navigator.clipboard.writeText(d.url); } catch {}
   };
 
+  // Publish to Marketplace
+  const openPublish = (tpl: any) => {
+    setPublishTemplate(tpl);
+    setPublishTitle(tpl.name);
+    setPublishDesc(tpl.description || "");
+    setPublishTrade(tpl.trade_type || "general");
+    setPublishTags("");
+    setPublishPrice("0");
+    setPublishError("");
+    setPublishDone("");
+    setPublishListingId("");
+  };
+
+  const submitPublish = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPublishing(true); setPublishError(""); setPublishDone("");
+    try {
+      const res = await fetch("/api/call", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ function: "templates.publish", args: { data: { templateId: publishTemplate.id, title: publishTitle, description: publishDesc, trade: publishTrade, tags: publishTags, price: parseFloat(publishPrice) || 0 } } }),
+        credentials: "include",
+      });
+      const d = await res.json();
+      if (d.error) { setPublishError(d.error); return; }
+      setPublishListingId(d.listingId);
+      setPublishDone("Published! Your listing is now live in the marketplace.");
+    } catch (err: any) { setPublishError(err.message); }
+    finally { setPublishing(false); }
+  };
+
   // Export
   const handleExport = async (tpl: any) => {
     const res = await fetch("/api/call", {
@@ -274,6 +316,7 @@ function TemplatesPage() {
           <div className="flex gap-2">
             <input ref={fileInputRef} type="file" accept=".json" onChange={handleImportFile} className="hidden" />
             <button onClick={() => fileInputRef.current?.click()} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">Import</button>
+            <Link to="/templates/marketplace" className="rounded-lg border border-indigo-200 px-4 py-2 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-400 dark:hover:bg-indigo-950">Marketplace</Link>
             <Link to="/estimates/new" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Start from Scratch</Link>
           </div>
         </div>
@@ -337,6 +380,7 @@ function TemplatesPage() {
                 <div className="mt-2 flex gap-1 flex-wrap">
                   <button onClick={() => startEdit(tpl)} className="text-xs text-indigo-600 hover:text-indigo-500 px-2 py-1">Edit</button>
                   <button onClick={() => handleShare(tpl)} className="text-xs text-indigo-600 hover:text-indigo-500 px-2 py-1">Share</button>
+                  <button onClick={() => openPublish(tpl)} className="text-xs text-green-600 hover:text-green-500 px-2 py-1">Publish</button>
                   <button onClick={() => handleExport(tpl)} className="text-xs text-indigo-600 hover:text-indigo-500 px-2 py-1">Export</button>
                   <button onClick={() => deleteTemplate(tpl)} className="text-xs text-red-500 hover:text-red-400 px-2 py-1">Delete</button>
                 </div>
@@ -478,6 +522,58 @@ function TemplatesPage() {
                 <div className="flex gap-3">
                   <button type="submit" disabled={creating} className="flex-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{creating ? "Creating..." : "Create Estimate"}</button>
                   <button type="button" onClick={() => setShowCreate(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900">Cancel</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+        {/* Publish to Marketplace Modal */}
+        {publishTemplate && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="mx-4 w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl dark:bg-gray-900">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Publish to Marketplace</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">&ldquo;{publishTemplate.name}&rdquo; — share it with other contractors</p>
+                </div>
+                <button onClick={() => setPublishTemplate(null)} className="text-gray-400 hover:text-gray-600"><svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
+              </div>
+              <form onSubmit={submitPublish} className="mt-4 space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Listing Title</label>
+                  <input type="text" value={publishTitle} onChange={e => setPublishTitle(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800" required maxLength={120} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                  <textarea value={publishDesc} onChange={e => setPublishDesc(e.target.value)} rows={3} placeholder="What jobs is this template for? What's included?" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Trade</label>
+                    <select value={publishTrade} onChange={e => setPublishTrade(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800">
+                      {TRADES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Price (USD)</label>
+                    <input type="number" min="0" step="0.01" value={publishPrice} onChange={e => setPublishPrice(e.target.value)} placeholder="0 = free" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800" />
+                    <p className="mt-1 text-[11px] text-gray-400">Free or $4.99–$49.99. You keep 80% of sales.</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Tags <span className="text-gray-400">(comma separated)</span></label>
+                  <input type="text" value={publishTags} onChange={e => setPublishTags(e.target.value)} placeholder="residential, new-construction, panel-upgrade" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800" />
+                </div>
+                {publishError && <p className="text-sm text-red-500">{publishError}</p>}
+                {publishDone && (
+                  <div className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                    <p>{publishDone}</p>
+                    <Link to={`/templates/marketplace/${publishListingId}`} className="mt-1 inline-block underline">View your listing →</Link>
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  <button type="submit" disabled={publishing || !!publishDone} className="flex-1 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50">{publishing ? "Publishing..." : "Publish"}</button>
+                  <button type="button" onClick={() => setPublishTemplate(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900">Done</button>
                 </div>
               </form>
             </div>

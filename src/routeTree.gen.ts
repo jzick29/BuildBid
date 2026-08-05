@@ -57,6 +57,8 @@ import { Route as EstimatesIdRouteImport } from './routes/estimates.$id'
 import { Route as ContractsIdRouteImport } from './routes/contracts.$id'
 import { Route as CoIdRouteImport } from './routes/co.$id'
 import { Route as ChangeOrdersIdRouteImport } from './routes/change-orders.$id'
+import { Route as TemplatesMarketplaceIndexRouteImport } from './routes/templates/marketplace/index'
+import { Route as TemplatesMarketplaceListingIdRouteImport } from './routes/templates/marketplace/$listingId'
 import { Route as PortalEstimateIdRouteImport } from './routes/portal/estimate.$id'
 import { Route as PortalChangeOrderIdRouteImport } from './routes/portal/change-order.$id'
 
@@ -302,6 +304,18 @@ const ChangeOrdersIdRoute = ChangeOrdersIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ChangeOrdersRoute,
 } as any)
+const TemplatesMarketplaceIndexRoute =
+  TemplatesMarketplaceIndexRouteImport.update({
+    id: '/marketplace/',
+    path: '/marketplace/',
+    getParentRoute: () => TemplatesRoute,
+  } as any)
+const TemplatesMarketplaceListingIdRoute =
+  TemplatesMarketplaceListingIdRouteImport.update({
+    id: '/marketplace/$listingId',
+    path: '/marketplace/$listingId',
+    getParentRoute: () => TemplatesRoute,
+  } as any)
 const PortalEstimateIdRoute = PortalEstimateIdRouteImport.update({
   id: '/portal/estimate/$id',
   path: '/portal/estimate/$id',
@@ -346,7 +360,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/subscribe': typeof SubscribeRouteWithChildren
   '/team': typeof TeamRoute
-  '/templates': typeof TemplatesRoute
+  '/templates': typeof TemplatesRouteWithChildren
   '/change-orders/$id': typeof ChangeOrdersIdRoute
   '/co/$id': typeof CoIdRoute
   '/contracts/$id': typeof ContractsIdRoute
@@ -364,6 +378,8 @@ export interface FileRoutesByFullPath {
   '/portal/': typeof PortalIndexRoute
   '/portal/change-order/$id': typeof PortalChangeOrderIdRoute
   '/portal/estimate/$id': typeof PortalEstimateIdRoute
+  '/templates/marketplace/$listingId': typeof TemplatesMarketplaceListingIdRoute
+  '/templates/marketplace/': typeof TemplatesMarketplaceIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -397,7 +413,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/subscribe': typeof SubscribeRouteWithChildren
   '/team': typeof TeamRoute
-  '/templates': typeof TemplatesRoute
+  '/templates': typeof TemplatesRouteWithChildren
   '/change-orders/$id': typeof ChangeOrdersIdRoute
   '/co/$id': typeof CoIdRoute
   '/contracts/$id': typeof ContractsIdRoute
@@ -415,6 +431,8 @@ export interface FileRoutesByTo {
   '/portal': typeof PortalIndexRoute
   '/portal/change-order/$id': typeof PortalChangeOrderIdRoute
   '/portal/estimate/$id': typeof PortalEstimateIdRoute
+  '/templates/marketplace/$listingId': typeof TemplatesMarketplaceListingIdRoute
+  '/templates/marketplace': typeof TemplatesMarketplaceIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -450,7 +468,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/subscribe': typeof SubscribeRouteWithChildren
   '/team': typeof TeamRoute
-  '/templates': typeof TemplatesRoute
+  '/templates': typeof TemplatesRouteWithChildren
   '/change-orders/$id': typeof ChangeOrdersIdRoute
   '/co/$id': typeof CoIdRoute
   '/contracts/$id': typeof ContractsIdRoute
@@ -468,6 +486,8 @@ export interface FileRoutesById {
   '/portal/': typeof PortalIndexRoute
   '/portal/change-order/$id': typeof PortalChangeOrderIdRoute
   '/portal/estimate/$id': typeof PortalEstimateIdRoute
+  '/templates/marketplace/$listingId': typeof TemplatesMarketplaceListingIdRoute
+  '/templates/marketplace/': typeof TemplatesMarketplaceIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -522,6 +542,8 @@ export interface FileRouteTypes {
     | '/portal/'
     | '/portal/change-order/$id'
     | '/portal/estimate/$id'
+    | '/templates/marketplace/$listingId'
+    | '/templates/marketplace/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -573,6 +595,8 @@ export interface FileRouteTypes {
     | '/portal'
     | '/portal/change-order/$id'
     | '/portal/estimate/$id'
+    | '/templates/marketplace/$listingId'
+    | '/templates/marketplace'
   id:
     | '__root__'
     | '/'
@@ -625,6 +649,8 @@ export interface FileRouteTypes {
     | '/portal/'
     | '/portal/change-order/$id'
     | '/portal/estimate/$id'
+    | '/templates/marketplace/$listingId'
+    | '/templates/marketplace/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -660,7 +686,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   SubscribeRoute: typeof SubscribeRouteWithChildren
   TeamRoute: typeof TeamRoute
-  TemplatesRoute: typeof TemplatesRoute
+  TemplatesRoute: typeof TemplatesRouteWithChildren
   CoIdRoute: typeof CoIdRoute
   PortalLoginRoute: typeof PortalLoginRoute
   SignEstimateIdRoute: typeof SignEstimateIdRoute
@@ -1009,6 +1035,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChangeOrdersIdRouteImport
       parentRoute: typeof ChangeOrdersRoute
     }
+    '/templates/marketplace/': {
+      id: '/templates/marketplace/'
+      path: '/marketplace'
+      fullPath: '/templates/marketplace/'
+      preLoaderRoute: typeof TemplatesMarketplaceIndexRouteImport
+      parentRoute: typeof TemplatesRoute
+    }
+    '/templates/marketplace/$listingId': {
+      id: '/templates/marketplace/$listingId'
+      path: '/marketplace/$listingId'
+      fullPath: '/templates/marketplace/$listingId'
+      preLoaderRoute: typeof TemplatesMarketplaceListingIdRouteImport
+      parentRoute: typeof TemplatesRoute
+    }
     '/portal/estimate/$id': {
       id: '/portal/estimate/$id'
       path: '/portal/estimate/$id'
@@ -1094,6 +1134,20 @@ const SubscribeRouteWithChildren = SubscribeRoute._addFileChildren(
   SubscribeRouteChildren,
 )
 
+interface TemplatesRouteChildren {
+  TemplatesMarketplaceListingIdRoute: typeof TemplatesMarketplaceListingIdRoute
+  TemplatesMarketplaceIndexRoute: typeof TemplatesMarketplaceIndexRoute
+}
+
+const TemplatesRouteChildren: TemplatesRouteChildren = {
+  TemplatesMarketplaceListingIdRoute: TemplatesMarketplaceListingIdRoute,
+  TemplatesMarketplaceIndexRoute: TemplatesMarketplaceIndexRoute,
+}
+
+const TemplatesRouteWithChildren = TemplatesRoute._addFileChildren(
+  TemplatesRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
@@ -1127,7 +1181,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   SubscribeRoute: SubscribeRouteWithChildren,
   TeamRoute: TeamRoute,
-  TemplatesRoute: TemplatesRoute,
+  TemplatesRoute: TemplatesRouteWithChildren,
   CoIdRoute: CoIdRoute,
   PortalLoginRoute: PortalLoginRoute,
   SignEstimateIdRoute: SignEstimateIdRoute,

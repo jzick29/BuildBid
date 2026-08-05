@@ -9,6 +9,7 @@ import handler from "./dist/server/server.js";
 import { parseEstimateFromDescription, estimateFromDescription } from "./src/lib/ai-prompts";
 import { sendSms, findCustomerPhone, getSmsSettings, saveSmsSettings, getSmsLogs, getAdminSmsLogs } from "./src/lib/sms";
 import { getReportFilters, getProfitability, getWinLoss, getEstimatorPerformance, getRevenueTrends, getCostBreakdown } from "./src/lib/reports";
+import { publishListing, unpublishListing, getMyListings, searchListings, getListingDetail, checkoutListing, installListing, rateListing } from "./src/lib/marketplace";
 
 const getPool = () => {
   if (!(globalThis as any).__buildbid_pool) {
@@ -223,6 +224,9 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         `CREATE TABLE IF NOT EXISTS templates (id TEXT PRIMARY KEY, name TEXT NOT NULL, trade_type TEXT NOT NULL, description TEXT DEFAULT '', user_id TEXT REFERENCES users(id) ON DELETE SET NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS template_line_items (id TEXT PRIMARY KEY, template_id TEXT NOT NULL REFERENCES templates(id) ON DELETE CASCADE, description TEXT NOT NULL, quantity REAL NOT NULL DEFAULT 1, unit TEXT NOT NULL DEFAULT 'each', unit_cost REAL NOT NULL DEFAULT 0, markup_percent REAL NOT NULL DEFAULT 10, sort_order INTEGER NOT NULL DEFAULT 0)`,
         `CREATE TABLE IF NOT EXISTS template_shares (id TEXT PRIMARY KEY, template_id TEXT NOT NULL REFERENCES templates(id) ON DELETE CASCADE, shared_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, token TEXT UNIQUE NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS template_listings (id TEXT PRIMARY KEY, template_id TEXT NOT NULL REFERENCES templates(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, description TEXT DEFAULT '', trade TEXT NOT NULL DEFAULT 'general', tags TEXT DEFAULT '', price_cents INTEGER NOT NULL DEFAULT 0, is_published INTEGER NOT NULL DEFAULT 1, downloads INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS template_ratings (id TEXT PRIMARY KEY, listing_id TEXT NOT NULL REFERENCES template_listings(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, rating INTEGER NOT NULL DEFAULT 5, review TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS template_installs (id TEXT PRIMARY KEY, listing_id TEXT NOT NULL REFERENCES template_listings(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'installed', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS customer_id TEXT`,
         `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS auto_renew BOOLEAN NOT NULL DEFAULT false`,
         `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS renewal_notice_days INTEGER NOT NULL DEFAULT 30`,
@@ -314,6 +318,27 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
           const customerEmail = session.customer_details?.email || session.customer_email;
           const metaUserId = session.metadata?.userId;
           const metaPlan = session.metadata?.plan;
+          // Marketplace template purchase (one-time payment link)
+          const metaListing = session.metadata?.listing_id;
+          if (metaListing) {
+            let buyerId = metaUserId || "";
+            if (!buyerId && customerEmail) {
+              const uq = await pool.query("SELECT id FROM users WHERE email=$1", [customerEmail]);
+              if (uq.rows[0]) buyerId = uq.rows[0].id;
+            }
+            if (buyerId) {
+              const dup = await pool.query("SELECT 1 FROM template_installs WHERE listing_id=$1 AND user_id=$2 AND status='paid'", [metaListing, buyerId]);
+              if (!dup.rows[0]) {
+                await pool.query("INSERT INTO template_installs (id, listing_id, user_id, status) VALUES ($1,$2,$3,'paid')", [crypto.randomUUID(), metaListing, buyerId]);
+              }
+            }
+            try {
+              await pool.query("INSERT INTO payments (id, user_id, stripe_event_id, amount, currency, status, tier, customer_email, stripe_customer_id, created_at) VALUES ($1,$2,$3,$4,$5,'succeeded','marketplace',$6,$7,NOW())",
+                [crypto.randomUUID(), buyerId || null, event.id || "", session.amount_total || 0, session.currency || "usd", customerEmail || "", session.customer || null]);
+            } catch (pe: any) { console.error("[stripe-webhook] marketplace payments insert failed:", pe.message); }
+            res.statusCode = 200; res.end(JSON.stringify({ received: true, kind: "marketplace" }));
+            return;
+          }
           // Map amount_total to tier: 4900=starter, 9900=pro, 19900=shop
           const amountToTier: Record<number, string> = { 4900: "starter", 9900: "pro", 19900: "shop" };
           let tier = metaPlan || amountToTier[session.amount_total] || "";
@@ -2368,6 +2393,47 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
           case "reports.costBreakdown": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             result = await getCostBreakdown(pool, userId, args?.data || {});
+            break;
+          }
+          // === Template marketplace ===
+          case "templates.publish": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await publishListing(pool, userId, args?.data || {});
+            break;
+          }
+          case "templates.unpublish": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await unpublishListing(pool, userId, args?.data || {});
+            break;
+          }
+          case "templates.getMyListings": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getMyListings(pool, userId, args?.data || {});
+            break;
+          }
+          case "templates.search": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await searchListings(pool, userId, args?.data || {});
+            break;
+          }
+          case "templates.getListing": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getListingDetail(pool, userId, args?.data || {});
+            break;
+          }
+          case "templates.checkout": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await checkoutListing(pool, userId, args?.data || {});
+            break;
+          }
+          case "templates.install": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await installListing(pool, userId, args?.data || {});
+            break;
+          }
+          case "templates.rate": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await rateListing(pool, userId, args?.data || {});
             break;
           }
           default: { res.statusCode = 501; res.end(JSON.stringify({ error: "Unknown: " + fnName })); return; }
