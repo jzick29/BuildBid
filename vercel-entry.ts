@@ -7,6 +7,7 @@ import { Pool } from "pg";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import handler from "./dist/server/server.js";
 import { parseEstimateFromDescription, estimateFromDescription } from "./src/lib/ai-prompts";
+import { sendSms, findCustomerPhone, getSmsSettings, saveSmsSettings, getSmsLogs, getAdminSmsLogs } from "./src/lib/sms";
 
 const getPool = () => {
   if (!(globalThis as any).__buildbid_pool) {
@@ -177,6 +178,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
       `);
       // Migrations: add columns that may not exist in existing databases
       try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS source TEXT DEFAULT ''"); } catch {}
+      try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_enabled INTEGER NOT NULL DEFAULT 1"); } catch {}
       try { await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS tax_rate REAL NOT NULL DEFAULT 0"); } catch {}
       try { await pool.query("ALTER TABLE line_items ADD COLUMN IF NOT EXISTS tax_rate REAL NOT NULL DEFAULT 0"); } catch {}
       // Fix existing TEXT columns to TIMESTAMPTZ (legacy migration)
@@ -267,6 +269,9 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         `CREATE INDEX IF NOT EXISTS idx_cu_user ON client_users(user_id)`,
         `CREATE INDEX IF NOT EXISTS idx_cs_client ON client_sessions(client_user_id)`,
         `CREATE INDEX IF NOT EXISTS idx_estimates_client ON estimates(client_user_id)`,
+        // === sms notifications ===
+        `CREATE TABLE IF NOT EXISTS sms_log (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, type TEXT NOT NULL DEFAULT 'custom', to_phone TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'dry_run', provider TEXT NOT NULL DEFAULT 'dry-run', error TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE INDEX IF NOT EXISTS idx_sms_log_user ON sms_log(user_id)`,
         ];
         for (const t of appTables) {
         try { await pool.query(t); } catch (e) { console.error("App table create error:", e); }
