@@ -18,6 +18,7 @@ import "~/lib/email-proposals";
 import "~/lib/estimates";
 import "~/lib/subcontractors";
 import "~/lib/branding";
+import "~/lib/takeoff";
 import "~/lib/feedback";
 import "~/lib/integrations";
 import "~/lib/invoices";

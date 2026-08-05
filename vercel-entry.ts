@@ -12,6 +12,7 @@ import { getReportFilters, getProfitability, getWinLoss, getEstimatorPerformance
 import { publishListing, unpublishListing, getMyListings, searchListings, getListingDetail, checkoutListing, installListing, rateListing } from "./src/lib/marketplace";
 import { listRfqs, getRfq, createRfq, updateRfqStatus, addQuote, updateQuoteStatus, deleteQuote, compareQuotes } from "./src/lib/subcontractors";
 import { getBranding, saveBranding } from "./src/lib/branding";
+import { listTakeoffs, getTakeoff, createTakeoff, setScale, addMeasurement, deleteMeasurement, deleteTakeoff } from "./src/lib/takeoff";
 
 const getPool = () => {
   if (!(globalThis as any).__buildbid_pool) {
@@ -232,6 +233,8 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         `CREATE TABLE IF NOT EXISTS rfqs (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, estimate_id TEXT REFERENCES estimates(id) ON DELETE SET NULL, scope TEXT DEFAULT '', due_date TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'open', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS rfq_quotes (id TEXT PRIMARY KEY, rfq_id TEXT NOT NULL REFERENCES rfqs(id) ON DELETE CASCADE, subcontractor TEXT NOT NULL, contact TEXT DEFAULT '', email TEXT DEFAULT '', phone TEXT DEFAULT '', amount REAL NOT NULL DEFAULT 0, timeline TEXT DEFAULT '', notes TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', received_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS branding (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, company_name TEXT DEFAULT '', logo_url TEXT DEFAULT '', primary_color TEXT NOT NULL DEFAULT '#4f46e5', accent_color TEXT NOT NULL DEFAULT '#0ea5e9', custom_domain TEXT DEFAULT '', white_label INTEGER NOT NULL DEFAULT 0, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS takeoff_projects (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, image_url TEXT NOT NULL, scale_label TEXT DEFAULT '', pixels_per_unit REAL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS takeoff_measurements (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES takeoff_projects(id) ON DELETE CASCADE, label TEXT DEFAULT '', kind TEXT NOT NULL DEFAULT 'line', points TEXT NOT NULL, value REAL NOT NULL DEFAULT 0, unit TEXT NOT NULL DEFAULT 'ft', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS customer_id TEXT`,
         `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS auto_renew BOOLEAN NOT NULL DEFAULT false`,
         `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS renewal_notice_days INTEGER NOT NULL DEFAULT 30`,
@@ -1879,6 +1882,41 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
           case "rfqs.compare": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             result = await compareQuotes(args, userId, pool);
+            break;
+          }
+          case "takeoffs.list": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await listTakeoffs(args, userId, pool);
+            break;
+          }
+          case "takeoffs.get": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getTakeoff(args, userId, pool);
+            break;
+          }
+          case "takeoffs.create": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await createTakeoff(args, userId, pool);
+            break;
+          }
+          case "takeoffs.setScale": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await setScale(args, userId, pool);
+            break;
+          }
+          case "takeoffs.addMeasurement": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await addMeasurement(args, userId, pool);
+            break;
+          }
+          case "takeoffs.deleteMeasurement": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await deleteMeasurement(args, userId, pool);
+            break;
+          }
+          case "takeoffs.delete": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await deleteTakeoff(args, userId, pool);
             break;
           }
           case "branding.get": {
