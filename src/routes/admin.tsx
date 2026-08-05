@@ -15,9 +15,10 @@ function AdminDashboard() {
   const [payments, setPayments] = useState<any[]>([]);
   const [paymentStats, setPaymentStats] = useState<any>(null);
   const [paymentFilter, setPaymentFilter] = useState("all");
+  const [analytics, setAnalytics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState("");
-  const [tab, setTab] = useState<"users"|"payments"|"overview"|"audit"|"health"|"sms">("users");
+  const [tab, setTab] = useState<"users"|"payments"|"overview"|"audit"|"health"|"sms"|"analytics">("users");
 
   const loadData = async () => {
     const meRes = await fetch("/api/me", { credentials: "include" });
@@ -56,6 +57,10 @@ function AdminDashboard() {
   const loadSmsLogs = async () => {
     const r = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "sms.adminGetLogs", args: { data: { limit: 100 } } }), credentials: "include" }).then(r => r.json());
     setSmsLogs(Array.isArray(r.logs) ? r.logs : []);
+  };
+  const loadAnalytics = async () => {
+    const r = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "admin.getAnalytics", args: {} }), credentials: "include" }).then(r => r.json());
+    if (!r.error) setAnalytics(r);
   };
 
   useEffect(() => { loadData(); }, []);
@@ -121,8 +126,8 @@ function AdminDashboard() {
 
         {/* Tabs */}
         <div className="mt-6 flex gap-2 border-b border-gray-200 dark:border-gray-800 pb-px">
-          {[{ key: "users", label: "Users" }, { key: "payments", label: "Payments" }, { key: "overview", label: "Overview" }, { key: "audit", label: "Audit Log" }, { key: "health", label: "Health" }, { key: "sms", label: "SMS Logs" }].map(t => (
-            <button key={t.key} onClick={() => { setTab(t.key as any); if (t.key === "payments") loadPayments(); if (t.key === "overview") loadPaymentStats(); if (t.key === "audit") loadAuditLog(); if (t.key === "health") { loadHealth(); loadPlatformStats(); } if (t.key === "sms") loadSmsLogs(); }}
+          {[{ key: "users", label: "Users" }, { key: "payments", label: "Payments" }, { key: "overview", label: "Overview" }, { key: "audit", label: "Audit Log" }, { key: "health", label: "Health" }, { key: "sms", label: "SMS Logs" }, { key: "analytics", label: "Analytics" }].map(t => (
+            <button key={t.key} onClick={() => { setTab(t.key as any); if (t.key === "payments") loadPayments(); if (t.key === "overview") loadPaymentStats(); if (t.key === "audit") loadAuditLog(); if (t.key === "health") { loadHealth(); loadPlatformStats(); } if (t.key === "sms") loadSmsLogs(); if (t.key === "analytics") loadAnalytics(); }}
               className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${tab === t.key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
               {t.label}
             </button>
@@ -331,6 +336,89 @@ function AdminDashboard() {
               </div>
             ) : <p className="mt-4 text-sm text-gray-400">No SMS activity yet</p>}
           </div>
+        )}
+        {/* Analytics Tab */}
+        {tab === "analytics" && (
+          <>
+            {analytics ? (
+              <>
+                <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"><p className="text-2xl font-bold">{analytics.totalSignups}</p><p className="mt-1 text-xs text-gray-500">Total Signups</p></div>
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-900 dark:bg-blue-950/30"><p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{analytics.signups30d}</p><p className="mt-1 text-xs text-blue-600 dark:text-blue-400">Signups (30d)</p></div>
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-5 dark:border-indigo-900 dark:bg-indigo-950/30"><p className="text-2xl font-bold text-indigo-700 dark:text-indigo-400">{analytics.signups7d}</p><p className="mt-1 text-xs text-indigo-600 dark:text-indigo-400">Signups (7d)</p></div>
+                  <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"><p className="text-2xl font-bold">{analytics.totalEstimates}</p><p className="mt-1 text-xs text-gray-500">Estimates Created</p></div>
+                  <div className="rounded-xl border border-green-200 bg-green-50 p-5 dark:border-green-900 dark:bg-green-950/30"><p className="text-2xl font-bold text-green-700 dark:text-green-400">{analytics.totalWon}</p><p className="mt-1 text-xs text-green-600 dark:text-green-400">Estimates Won</p></div>
+                </div>
+
+                {/* Conversion funnel */}
+                <div className="mt-6 rounded-xl border border-gray-200 p-5 dark:border-gray-800">
+                  <h3 className="font-semibold">Conversion Funnel</h3>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Distinct users who signed up → created an estimate → won a job (from tracked events)</p>
+                  <div className="mt-4 flex items-end gap-3">
+                    {[
+                      { label: "Signups", value: analytics.funnel?.signups || 0, color: "bg-indigo-500" },
+                      { label: "Created estimate", value: analytics.funnel?.estimatesCreated || 0, color: "bg-blue-500" },
+                      { label: "Won a job", value: analytics.funnel?.estimatesWon || 0, color: "bg-green-500" },
+                    ].map((s: any, i: number) => {
+                      const maxV = Math.max(analytics.funnel?.signups || 1, 1);
+                      const pct = s.value > 0 && analytics.funnel?.signups ? Math.round((s.value / analytics.funnel.signups) * 100) : 0;
+                      return (
+                        <div key={s.label} className="flex-1 text-center">
+                          <div className="text-lg font-bold">{s.value}</div>
+                          <div className={`mx-auto mt-1 h-24 w-full max-w-[80px] rounded-t-lg ${s.color}`} style={{ height: `${Math.max(8, (s.value / maxV) * 96)}px` }} />
+                          <div className="mt-1 text-xs font-medium">{s.label}</div>
+                          <div className="text-[10px] text-gray-500">{pct}% of signups</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Events by type */}
+                <div className="mt-6 rounded-xl border border-gray-200 p-5 dark:border-gray-800">
+                  <h3 className="font-semibold">Events by Type</h3>
+                  {analytics.byType && analytics.byType.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      {analytics.byType.map((e: any) => {
+                        const maxC = Math.max(...analytics.byType.map((x: any) => x.count), 1);
+                        return (
+                          <div key={e.event_type} className="flex items-center gap-3">
+                            <span className="w-44 shrink-0 truncate text-xs font-medium text-gray-700 dark:text-gray-300">{e.event_type}</span>
+                            <div className="h-4 flex-1 overflow-hidden rounded bg-gray-100 dark:bg-gray-800">
+                              <div className="h-full rounded bg-indigo-500" style={{ width: `${(e.count / maxC) * 100}%` }} />
+                            </div>
+                            <span className="w-10 shrink-0 text-right text-xs text-gray-600">{e.count}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : <p className="mt-3 text-sm text-gray-400">No events tracked yet — they appear as users sign up and use the app.</p>}
+                </div>
+
+                {/* Recent events */}
+                <div className="mt-6 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+                  <h3 className="px-4 pt-4 font-semibold">Recent Events (last 50)</h3>
+                  <table className="mt-2 w-full text-left text-sm">
+                    <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-950 dark:text-gray-400"><tr><th className="px-4 py-2">User</th><th className="px-4 py-2">Event</th><th className="px-4 py-2">Details</th><th className="px-4 py-2">Time</th></tr></thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-900">
+                      {analytics.recentEvents && analytics.recentEvents.length > 0 ? analytics.recentEvents.map((e: any) => {
+                        let detail = e.event_data && e.event_data !== "{}" ? e.event_data : "";
+                        if (detail && typeof detail === "string") { try { detail = JSON.stringify(JSON.parse(detail)); } catch {} }
+                        return (
+                          <tr key={e.id}>
+                            <td className="px-4 py-2 text-xs">{e.user_email}</td>
+                            <td className="px-4 py-2 text-xs font-medium">{e.event_type}</td>
+                            <td className="max-w-[300px] truncate px-4 py-2 text-xs text-gray-500" title={detail}>{detail}</td>
+                            <td className="px-4 py-2 text-xs text-gray-500">{new Date(e.created_at).toLocaleString()}</td>
+                          </tr>
+                        );
+                      }) : <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-500">No events yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : <p className="mt-6 text-sm text-gray-500">Loading analytics…</p>}
+          </>
         )}
       </main>
     </div>

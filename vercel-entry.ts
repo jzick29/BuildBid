@@ -20,6 +20,7 @@ import {
 import {
   listApiKeys, createApiKey, revokeApiKey, listWebhooks, createWebhook, updateWebhook, deleteWebhook, testFireWebhook, getWebhookLogs, getZapierManifest, fireWebhook, verifyApiKey,
 } from "./src/lib/webhooks";
+import { trackEvent } from "./src/lib/analytics";
 
 const getPool = () => {
   if (!(globalThis as any).__buildbid_pool) {
@@ -67,6 +68,7 @@ async function handleSignup(body: any) {
     [id, email, hash, name || "", "trial", trialEndsAt, role, source || ""]);
   const token = crypto.randomUUID();
   await pool.query("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1,$2,$3)", [token, id, new Date(Date.now() + 7 * 86400000).toISOString()]);
+  void trackEvent(pool, id, "signup", { source: source || "" });
   const resp = new Response(JSON.stringify({ success: true, user: { id, email, name } }), { status: 200, headers: { "Content-Type": "application/json" } });
   resp.headers.append("Set-Cookie", `buildbid_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${7 * 86400}`);
   return resp;
@@ -81,6 +83,7 @@ async function handleLogin(body: any) {
   if (r.rows[0].frozen === 1) return new Response(JSON.stringify({ error: "Account frozen. Contact support." }), { status: 403, headers: { "Content-Type": "application/json" } });
   const token = crypto.randomUUID();
   await pool.query("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1,$2,$3)", [token, r.rows[0].id, new Date(Date.now() + 7 * 86400000).toISOString()]);
+  void trackEvent(pool, r.rows[0].id, "login");
   const resp = new Response(JSON.stringify({ success: true, user: r.rows[0] }), { status: 200, headers: { "Content-Type": "application/json" } });
   resp.headers.append("Set-Cookie", `buildbid_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${7 * 86400}`);
   return resp;
@@ -303,6 +306,11 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         `CREATE INDEX IF NOT EXISTS idx_webhook_ep_user ON webhook_endpoints(user_id)`,
         `CREATE TABLE IF NOT EXISTS webhook_logs (id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL REFERENCES webhook_endpoints(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, event TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', status_code INTEGER NOT NULL DEFAULT 0, response TEXT DEFAULT '', duration_ms INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `CREATE INDEX IF NOT EXISTS idx_webhook_logs_user ON webhook_logs(user_id)`,
+        // === usage analytics ===
+        `CREATE TABLE IF NOT EXISTS analytics_events (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, event_type TEXT NOT NULL, event_data TEXT NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE INDEX IF NOT EXISTS idx_analytics_user ON analytics_events(user_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_analytics_type ON analytics_events(event_type)`,
+        `CREATE INDEX IF NOT EXISTS idx_analytics_created ON analytics_events(created_at)`,
         ];
         for (const t of appTables) {
         try { await pool.query(t); } catch (e) { console.error("App table create error:", e); }
@@ -797,6 +805,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             const eid = crypto.randomUUID();
             await pool.query("INSERT INTO estimates (id, user_id, project_name, customer_name, trade, status) VALUES ($1,$2,$3,$4,$5,'draft')",
               [eid, userId, d.projectName.trim(), d.customerName.trim(), d.trade || "general"]);
+            void trackEvent(pool, userId, "estimate_created", { estimate_id: eid, project_name: d.projectName.trim(), customer_name: d.customerName.trim(), trade: d.trade || "general" });
             result = { id: eid };
             break;
           }
@@ -846,6 +855,13 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
                       id: est.id, project_name: est.project_name, customer_name: est.customer_name,
                       trade: est.trade, status: est.status, start_date: est.start_date, end_date: est.end_date,
                     });
+                    // usage analytics for status changes
+                    if (status === "sent") void trackEvent(pool, userId, "estimate_sent", { estimate_id: est.id, project_name: est.project_name, customer_name: est.customer_name });
+                    else if (status === "won") void trackEvent(pool, userId, "estimate_won", { estimate_id: est.id, project_name: est.project_name, customer_name: est.customer_name });
+                  }
+                } else if (status === "lost") {
+                  for (const est of estRows) {
+                    void trackEvent(pool, userId, "estimate_lost", { estimate_id: est.id, project_name: est.project_name, customer_name: est.customer_name });
                   }
                 }
                 if (status === "scheduled") {
@@ -963,6 +979,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
               await pool.query("INSERT INTO line_items (id, estimate_id, description, quantity, unit, unit_cost, markup_percent, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
                 [crypto.randomUUID(), aiEid, `Labor - ${aiTrade} (AI estimate)`, aiLaborHours, "hour", Number(aiD.laborRate) || 85, 0, aiSort++]);
             }
+            void trackEvent(pool, userId, "ai_estimate_created", { estimate_id: aiEid, project_name: String(aiD.projectName).trim(), customer_name: String(aiD.customerName).trim(), trade: aiTrade, line_items: aiItems.length });
             result = { id: aiEid };
             break;
           }
@@ -1087,6 +1104,34 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             const churned = (await pool.query("SELECT COUNT(*)::int as c FROM users WHERE stripe_customer_id IS NOT NULL AND stripe_customer_id != '' AND subscription_tier NOT IN ('starter','pro','shop') AND frozen = 0")).rows[0].c;
             const churnRate = (activeSubscribers + churned) > 0 ? Math.round((churned / (activeSubscribers + churned)) * 1000) / 10 : 0;
             result = { totalRevenue, mrr, activeSubscribers, activeTrials, totalUsers, frozenUsers, failedPayments, churned, churnRate, currency: "usd" };
+            break;
+          }
+          case "admin.getAnalytics": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const aan = await pool.query("SELECT role FROM users WHERE id = $1", [userId]);
+            if (aan.rows[0]?.role !== "admin") { res.statusCode = 403; res.end(JSON.stringify({ error: "Admin required" })); return; }
+            const [sigAll, sig30, sig7, estAll, wonAll, byType, recent] = await Promise.all([
+              pool.query("SELECT COUNT(*)::int as c FROM analytics_events WHERE event_type = 'signup'"),
+              pool.query("SELECT COUNT(*)::int as c FROM analytics_events WHERE event_type = 'signup' AND created_at >= NOW() - INTERVAL '30 days'"),
+              pool.query("SELECT COUNT(*)::int as c FROM analytics_events WHERE event_type = 'signup' AND created_at >= NOW() - INTERVAL '7 days'"),
+              pool.query("SELECT COUNT(*)::int as c FROM estimates"),
+              pool.query("SELECT COUNT(*)::int as c FROM estimates WHERE status = 'won'"),
+              pool.query("SELECT event_type, COUNT(*)::int as count FROM analytics_events GROUP BY event_type ORDER BY count DESC"),
+              pool.query("SELECT a.id, a.event_type, a.event_data, a.created_at, COALESCE(u.email, a.user_id) AS user_email FROM analytics_events a LEFT JOIN users u ON u.id = a.user_id ORDER BY a.created_at DESC LIMIT 50"),
+            ]);
+            const createdEv = (await pool.query("SELECT COUNT(DISTINCT user_id)::int as c FROM analytics_events WHERE event_type = 'estimate_created'")).rows[0].c;
+            const wonEv = (await pool.query("SELECT COUNT(DISTINCT user_id)::int as c FROM analytics_events WHERE event_type = 'estimate_won'")).rows[0].c;
+            const signups = sigAll.rows[0].c;
+            result = {
+              totalSignups: signups,
+              signups30d: sig30.rows[0].c,
+              signups7d: sig7.rows[0].c,
+              totalEstimates: estAll.rows[0].c,
+              totalWon: wonAll.rows[0].c,
+              funnel: { signups, estimatesCreated: createdEv, estimatesWon: wonEv },
+              byType: byType.rows,
+              recentEvents: recent.rows,
+            };
             break;
           }
           // === push ===
@@ -1452,6 +1497,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
                     id: inv.id, invoice_number: inv.invoice_number, total: inv.total, status: inv.status,
                     paid_at: inv.paid_at || new Date().toISOString(), project_name: inv.project_name, customer_name: inv.customer_name,
                   });
+                  void trackEvent(pool, userId, "invoice_paid", { invoice_id: inv.id, invoice_number: inv.invoice_number, total: inv.total, estimate_id: inv.estimate_id || "" });
                 }
               } catch (whErr: any) { console.error("[webhooks] invoice.paid fire failed:", whErr?.message || whErr); }
             }
@@ -1837,6 +1883,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             const estRow = (await pool.query("SELECT * FROM estimates WHERE id=$1 AND user_id=$2", [d24.id, userId])).rows[0];
             if (!estRow) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; }
             const items = (await pool.query("SELECT * FROM line_items WHERE estimate_id=$1 ORDER BY sort_order", [d24.id])).rows;
+            void trackEvent(pool, userId, "proposal_viewed", { estimate_id: estRow.id, project_name: estRow.project_name, customer_name: estRow.customer_name, status: estRow.status });
             result = { estimate: estRow, lineItems: items };
             break;
           }

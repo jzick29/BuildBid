@@ -753,6 +753,7 @@ export async function getDb() {
   try { db.run("CREATE TABLE IF NOT EXISTS salesforce_sync (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, estimate_id TEXT, sf_opportunity_id TEXT, status TEXT DEFAULT 'success', message TEXT, synced_at TEXT DEFAULT (datetime('now')))"); } catch {}
   try { db.run("CREATE TABLE IF NOT EXISTS hubspot_tokens (user_id TEXT PRIMARY KEY, access_token TEXT NOT NULL, refresh_token TEXT DEFAULT '', expires_at TEXT NOT NULL, updated_at TEXT DEFAULT (datetime('now')))"); } catch {}
   try { db.run("CREATE TABLE IF NOT EXISTS hubspot_sync (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, estimate_id TEXT, hs_deal_id TEXT, status TEXT DEFAULT 'success', message TEXT, synced_at TEXT DEFAULT (datetime('now')))"); } catch {}
+  try { db.run("CREATE TABLE IF NOT EXISTS analytics_events (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, event_type TEXT NOT NULL, event_data TEXT DEFAULT '{}', created_at TEXT NOT NULL DEFAULT (datetime('now')))"); } catch {}
   // Seed admin: if ADMIN_EMAIL is set, promote that user to admin.
   // Otherwise, promote the first-created user (lowest created_at).
   try {

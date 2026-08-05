@@ -1,4 +1,27 @@
 import { makeAuthFn } from "./iso";
+import crypto from "crypto";
+
+/**
+ * Fire-and-forget usage event tracking. Never throws and never blocks the
+ * caller's response — failures are logged and swallowed so analytics can never
+ * break a user action. Used from server handlers (vercel-entry + API routes).
+ */
+export async function trackEvent(
+  pool: any,
+  userId: string,
+  eventType: string,
+  eventData?: Record<string, unknown>
+): Promise<void> {
+  try {
+    const id = crypto.randomUUID();
+    await pool.query(
+      "INSERT INTO analytics_events (id, user_id, event_type, event_data) VALUES ($1,$2,$3,$4)",
+      [id, userId, eventType, eventData ? JSON.stringify(eventData) : "{}"]
+    );
+  } catch (e: any) {
+    console.error("[analytics] trackEvent failed:", eventType, e?.message || e);
+  }
+}
 
 export const getAnalytics = makeAuthFn("analytics.getAnalytics", async (_args, userId, pool) => {
   const stats = await pool.query("SELECT COUNT(*) as total, SUM(CASE WHEN status = 'won' THEN 1 ELSE 0 END) as won, SUM(CASE WHEN status = 'lost' THEN 1 ELSE 0 END) as lost FROM estimates WHERE user_id = $1", [userId]);
