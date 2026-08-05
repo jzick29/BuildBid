@@ -30,7 +30,18 @@ export const exportToQuickBooks = makeAuthFn("quickbooks.exportToQuickBooks", as
   const lineItems = (await pool.query("SELECT * FROM line_items WHERE estimate_id = $1 ORDER BY sort_order", [args.data.estimateId])).rows;
   const customerId = await findOrCreateCustomer(token.access_token, token.realm_id, estimate.customer_name);
   const invoiceId = await createQboInvoice(token.access_token, token.realm_id, customerId, estimate, lineItems);
-  return { invoiceId };
+
+  // Auto-mark estimate as won + link QB invoice to BuildBid invoices
+  await pool.query("UPDATE estimates SET status = 'won', updated_at = NOW() WHERE id = $1", [args.data.estimateId]);
+  await pool.query("UPDATE invoices SET qbo_invoice_id = $1 WHERE estimate_id = $2 AND qbo_invoice_id IS NULL", [invoiceId, args.data.estimateId]);
+
+  // Log sync event
+  await pool.query(
+    "INSERT INTO qbo_sync_log (id, user_id, entity_type, entity_id, qbo_id, direction, status, message, synced_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())",
+    [crypto.randomUUID(), userId, "estimate", args.data.estimateId, invoiceId, "export", "success", "Estimate auto-marked as won after QB export"]
+  );
+
+  return { invoiceId, estimateStatus: "won" };
 });
 
 async function findOrCreateCustomer(accessToken: string, realmId: string, customerName: string): Promise<string> {
