@@ -29,6 +29,7 @@ import "~/lib/price-lists";
 import "~/lib/proposals";
 import "~/lib/push";
 import "~/lib/sms";
+import "~/lib/reports";
 import "~/lib/quickbooks";
 import "~/lib/scheduling";
 import "~/lib/signatures";

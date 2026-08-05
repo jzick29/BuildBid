@@ -102,6 +102,7 @@ const navSections: NavSection[] = [
     label: "Insights",
     items: [
       { href: "/analytics", label: "Analytics", icon: "analytics" },
+      { href: "/reports", label: "Reports", icon: "analytics" },
       { href: "/team", label: "Team", icon: "team" },
       { href: "/automation", label: "Automations", icon: "automations" },
     ],

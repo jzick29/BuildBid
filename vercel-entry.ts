@@ -8,6 +8,7 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import handler from "./dist/server/server.js";
 import { parseEstimateFromDescription, estimateFromDescription } from "./src/lib/ai-prompts";
 import { sendSms, findCustomerPhone, getSmsSettings, saveSmsSettings, getSmsLogs, getAdminSmsLogs } from "./src/lib/sms";
+import { getReportFilters, getProfitability, getWinLoss, getEstimatorPerformance, getRevenueTrends, getCostBreakdown } from "./src/lib/reports";
 
 const getPool = () => {
   if (!(globalThis as any).__buildbid_pool) {
@@ -2338,9 +2339,35 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             result = { logs: await getSmsLogs(pool, userId, args?.data?.limit || 50) };
             break;
           }
-          case "sms.adminGetLogs": {
+          // === Reporting dashboard ===
+          case "reports.filters": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = { logs: await getAdminSmsLogs(pool, userId, args?.data?.limit || 100) };
+            result = await getReportFilters(pool, userId, args?.data || {});
+            break;
+          }
+          case "reports.profitability": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getProfitability(pool, userId, args?.data || {});
+            break;
+          }
+          case "reports.winLoss": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getWinLoss(pool, userId, args?.data || {});
+            break;
+          }
+          case "reports.estimatorPerformance": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getEstimatorPerformance(pool, userId, args?.data || {});
+            break;
+          }
+          case "reports.revenueTrends": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getRevenueTrends(pool, userId, args?.data || {});
+            break;
+          }
+          case "reports.costBreakdown": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getCostBreakdown(pool, userId, args?.data || {});
             break;
           }
           default: { res.statusCode = 501; res.end(JSON.stringify({ error: "Unknown: " + fnName })); return; }
