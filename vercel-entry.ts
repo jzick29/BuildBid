@@ -13,6 +13,13 @@ import { publishListing, unpublishListing, getMyListings, searchListings, getLis
 import { listRfqs, getRfq, createRfq, updateRfqStatus, addQuote, updateQuoteStatus, deleteQuote, compareQuotes } from "./src/lib/subcontractors";
 import { getBranding, saveBranding } from "./src/lib/branding";
 import { listTakeoffs, getTakeoff, createTakeoff, setScale, addMeasurement, deleteMeasurement, deleteTakeoff } from "./src/lib/takeoff";
+import {
+  getCalendarStatus, getCalendarAuthUrl, disconnectCalendar, getCalendarEvents, createCalendarEvent, deleteCalendarEvent, autoSyncScheduled,
+  getGoogleToken, storeGoogleToken, exchangeGoogleCode,
+} from "./src/lib/google-calendar";
+import {
+  listApiKeys, createApiKey, revokeApiKey, listWebhooks, createWebhook, updateWebhook, deleteWebhook, testFireWebhook, getWebhookLogs, getZapierManifest, fireWebhook, verifyApiKey,
+} from "./src/lib/webhooks";
 
 const getPool = () => {
   if (!(globalThis as any).__buildbid_pool) {
@@ -285,6 +292,17 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         // === sms notifications ===
         `CREATE TABLE IF NOT EXISTS sms_log (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, type TEXT NOT NULL DEFAULT 'custom', to_phone TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'dry_run', provider TEXT NOT NULL DEFAULT 'dry-run', error TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `CREATE INDEX IF NOT EXISTS idx_sms_log_user ON sms_log(user_id)`,
+        // === google calendar ===
+        `CREATE TABLE IF NOT EXISTS google_tokens (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, access_token TEXT NOT NULL, refresh_token TEXT DEFAULT '', calendar_id TEXT NOT NULL DEFAULT 'primary', expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS calendar_events (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, estimate_id TEXT REFERENCES estimates(id) ON DELETE CASCADE, google_event_id TEXT DEFAULT '', summary TEXT NOT NULL, event_start TEXT NOT NULL, event_end TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE INDEX IF NOT EXISTS idx_cal_events_user ON calendar_events(user_id)`,
+        // === webhook hub / api keys ===
+        `CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL DEFAULT 'API Key', key_prefix TEXT NOT NULL, key_hash TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0, last_used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id)`,
+        `CREATE TABLE IF NOT EXISTS webhook_endpoints (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL, url TEXT NOT NULL, events TEXT NOT NULL DEFAULT '[]', secret TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE INDEX IF NOT EXISTS idx_webhook_ep_user ON webhook_endpoints(user_id)`,
+        `CREATE TABLE IF NOT EXISTS webhook_logs (id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL REFERENCES webhook_endpoints(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, event TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', status_code INTEGER NOT NULL DEFAULT 0, response TEXT DEFAULT '', duration_ms INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE INDEX IF NOT EXISTS idx_webhook_logs_user ON webhook_logs(user_id)`,
         ];
         for (const t of appTables) {
         try { await pool.query(t); } catch (e) { console.error("App table create error:", e); }
@@ -442,6 +460,82 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         console.error("[sms/send] Error:", e?.message || e);
         res.statusCode = 500; res.end(JSON.stringify({ error: "SMS send failed" }));
       }
+      return;
+    }
+    // /api/google-oauth — Google Calendar OAuth2 callback (state = userId)
+    if (req.method === "GET" && url.startsWith("/api/google-oauth")) {
+      try {
+        const pool = getPool();
+        const parsed = new URL(url, "http://localhost");
+        const code = parsed.searchParams.get("code") || "";
+        const state = parsed.searchParams.get("state") || "";
+        const err = parsed.searchParams.get("error");
+        if (err) { res.statusCode = 302; res.setHeader("Location", (process.env.APP_URL || "https://buildbid.pro") + "/integrations?google=error"); res.end(); return; }
+        if (!code || !state) { res.statusCode = 400; res.end(JSON.stringify({ error: "Missing code or state" })); return; }
+        const tokens = await exchangeGoogleCode(code);
+        await storeGoogleToken(state, tokens.accessToken, tokens.refreshToken, tokens.expiresIn, null, pool);
+        res.statusCode = 302;
+        res.setHeader("Location", (process.env.APP_URL || "https://buildbid.pro") + "/integrations?google=connected");
+        res.end();
+      } catch (e: any) {
+        console.error("[google-oauth] Error:", e?.message || e);
+        res.statusCode = 302; res.setHeader("Location", (process.env.APP_URL || "https://buildbid.pro") + "/integrations?google=error"); res.end();
+      }
+      return;
+    }
+    // /api/v1/me — API-key auth check (Zapier test endpoint)
+    if (req.method === "GET" && url === "/api/v1/me") {
+      try {
+        const pool = getPool();
+        const apiKey = (req.headers["x-api-key"] as string) || "";
+        const uid = await verifyApiKey(pool, apiKey);
+        if (!uid) { res.statusCode = 401; res.end(JSON.stringify({ error: "Invalid API key" })); return; }
+        const u = (await pool.query("SELECT id, email, name, subscription_tier FROM users WHERE id = $1", [uid])).rows[0];
+        res.statusCode = 200; res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ ok: true, user: { id: u.id, email: u.email, name: u.name, tier: u.subscription_tier } }));
+      } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
+      return;
+    }
+    // /api/v1/webhook-pull — Zapier trigger: return recent events of a type
+    if (req.method === "GET" && url.startsWith("/api/v1/webhook-pull")) {
+      try {
+        const pool = getPool();
+        const apiKey = (req.headers["x-api-key"] as string) || "";
+        const uid = await verifyApiKey(pool, apiKey);
+        if (!uid) { res.statusCode = 401; res.end(JSON.stringify({ error: "Invalid API key" })); return; }
+        const parsed = new URL(url, "http://localhost");
+        const event = parsed.searchParams.get("event") || "";
+        let rows: any[] = [];
+        if (event === "estimate.won") {
+          rows = (await pool.query("SELECT id, project_name, customer_name, trade, status, updated_at FROM estimates WHERE user_id = $1 AND status = 'won' ORDER BY updated_at DESC LIMIT 50", [uid])).rows;
+        } else if (event === "estimate.sent") {
+          rows = (await pool.query("SELECT id, project_name, customer_name, trade, status, updated_at FROM estimates WHERE user_id = $1 AND status = 'sent' ORDER BY updated_at DESC LIMIT 50", [uid])).rows;
+        } else if (event === "invoice.paid") {
+          rows = (await pool.query("SELECT id, invoice_number, total, status, paid_at FROM invoices WHERE user_id = $1 AND status = 'paid' ORDER BY paid_at DESC NULLS LAST LIMIT 50", [uid])).rows;
+        } else {
+          rows = (await pool.query("SELECT id, project_name, customer_name, trade, status, updated_at FROM estimates WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 10", [uid])).rows;
+        }
+        res.statusCode = 200; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(rows));
+      } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
+      return;
+    }
+    // /api/v1/estimates — Zapier action: create estimate
+    if (req.method === "POST" && url === "/api/v1/estimates") {
+      try {
+        const pool = getPool();
+        const apiKey = (req.headers["x-api-key"] as string) || "";
+        const uid = await verifyApiKey(pool, apiKey);
+        if (!uid) { res.statusCode = 401; res.end(JSON.stringify({ error: "Invalid API key" })); return; }
+        const body = await readBody(req);
+        const projectName = String(body?.project_name || "").trim();
+        const customerName = String(body?.customer_name || "").trim();
+        if (!projectName || !customerName) { res.statusCode = 400; res.end(JSON.stringify({ error: "project_name and customer_name are required" })); return; }
+        const trade = String(body?.trade || "general").toLowerCase();
+        const eid = crypto.randomUUID();
+        await pool.query("INSERT INTO estimates (id, user_id, project_name, customer_name, trade, status) VALUES ($1,$2,$3,$4,$5,'draft')", [eid, uid, projectName, customerName, trade]);
+        res.statusCode = 200; res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ id: eid, project_name: projectName, customer_name: customerName, trade }));
+      } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
       return;
     }
     // /api/call
@@ -721,7 +815,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             const ids = d3.ids;
             const status = d3.status;
             if (!ids || !Array.isArray(ids) || ids.length === 0 || !status) { res.statusCode = 400; res.end(JSON.stringify({ error: "Missing ids or status" })); return; }
-            const validStatuses = ["draft", "sent", "won", "lost"];
+            const validStatuses = ["draft", "sent", "won", "lost", "scheduled", "in-progress", "completed"];
             if (!validStatuses.includes(status)) { res.statusCode = 400; res.end(JSON.stringify({ error: "Invalid status" })); return; }
             const placeholders = ids.map((_:any,i:number) => "$" + (i+2)).join(",");
             const sql = "UPDATE estimates SET status=$1, updated_at=NOW() WHERE id IN (" + placeholders + ") AND user_id=$" + (ids.length+2);
@@ -740,6 +834,26 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
                 }
               } catch (smsErr: any) { console.error("[sms] estimate won alert failed:", smsErr?.message || smsErr); }
             }
+            // Fire webhooks + Google Calendar sync on status changes
+            try {
+              const ph3 = ids.map((_: any, i: number) => "$" + (i + 1)).join(",");
+              const estRows = (await pool.query("SELECT id, project_name, customer_name, trade, status, start_date, end_date FROM estimates WHERE id IN (" + ph3 + ") AND user_id=$" + (ids.length + 1), [...ids, userId])).rows;
+              if (estRows.length > 0) {
+                const eventMap: Record<string, string> = { sent: "estimate.sent", won: "estimate.won", scheduled: "job.scheduled", "in-progress": "job.in_progress", completed: "job.completed" };
+                if (eventMap[status]) {
+                  for (const est of estRows) {
+                    await fireWebhook(pool, userId, eventMap[status], {
+                      id: est.id, project_name: est.project_name, customer_name: est.customer_name,
+                      trade: est.trade, status: est.status, start_date: est.start_date, end_date: est.end_date,
+                    });
+                  }
+                }
+                if (status === "scheduled") {
+                  const syncRes = await autoSyncScheduled(pool, userId, estRows.map((r: any) => r.id));
+                  if (syncRes?.synced > 0) console.log(`[calendar] auto-synced ${syncRes.synced} job(s) to Google Calendar`);
+                }
+              }
+            } catch (hookErr: any) { console.error("[hooks] status-change webhook/calendar failed:", hookErr?.message || hookErr); }
             result = { success: true, updated: ids.length };
             break;
           }
@@ -776,6 +890,21 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
               [userId, from, to]
             )).rows;
             result = { jobs: ests, visits };
+            break;
+          }
+          case "scheduling.setJobDates": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const dj = args?.data || {};
+            if (!dj.estimateId) { res.statusCode = 400; res.end(JSON.stringify({ error: "Missing estimateId" })); return; }
+            await pool.query("UPDATE estimates SET start_date = $1, end_date = $2, updated_at = NOW() WHERE id = $3 AND user_id = $4", [dj.startDate || "", dj.endDate || "", dj.estimateId, userId]);
+            // Fire job.scheduled webhook when dates are assigned
+            try {
+              const est = (await pool.query("SELECT id, project_name, customer_name, trade, status, start_date, end_date FROM estimates WHERE id = $1 AND user_id = $2", [dj.estimateId, userId])).rows[0];
+              if (est) {
+                await fireWebhook(pool, userId, "job.scheduled", { id: est.id, project_name: est.project_name, customer_name: est.customer_name, trade: est.trade, status: est.status, start_date: est.start_date, end_date: est.end_date });
+              }
+            } catch (e2: any) { console.error("[webhooks] job.scheduled fire failed:", e2?.message || e2); }
+            result = { success: true };
             break;
           }
           // === team ===
@@ -1314,6 +1443,18 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             if (d14.status === "paid") { updates.push("paid_at = NOW()"); }
             vals.push(d14.id, userId);
             await pool.query("UPDATE invoices SET " + updates.join(", ") + " WHERE id = $2 AND user_id = $3", vals);
+            // Fire invoice.paid webhook
+            if (d14.status === "paid") {
+              try {
+                const inv = (await pool.query("SELECT i.*, e.project_name, e.customer_name FROM invoices i LEFT JOIN estimates e ON e.id = i.estimate_id WHERE i.id = $1 AND i.user_id = $2", [d14.id, userId])).rows[0];
+                if (inv) {
+                  await fireWebhook(pool, userId, "invoice.paid", {
+                    id: inv.id, invoice_number: inv.invoice_number, total: inv.total, status: inv.status,
+                    paid_at: inv.paid_at || new Date().toISOString(), project_name: inv.project_name, customer_name: inv.customer_name,
+                  });
+                }
+              } catch (whErr: any) { console.error("[webhooks] invoice.paid fire failed:", whErr?.message || whErr); }
+            }
             result = { success: true };
             break;
           }
@@ -1927,6 +2068,88 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
           case "branding.save": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             result = await saveBranding(args, userId, pool);
+            break;
+          }
+          // === google calendar ===
+          case "calendar.getStatus": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getCalendarStatus(args, userId, pool);
+            break;
+          }
+          case "calendar.getAuthUrl": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getCalendarAuthUrl(args, userId, pool);
+            break;
+          }
+          case "calendar.disconnect": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await disconnectCalendar(args, userId, pool);
+            break;
+          }
+          case "calendar.getEvents": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getCalendarEvents(args, userId, pool);
+            break;
+          }
+          case "calendar.createEvent": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await createCalendarEvent(args, userId, pool);
+            break;
+          }
+          case "calendar.deleteEvent": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await deleteCalendarEvent(args, userId, pool);
+            break;
+          }
+          // === webhook hub / api keys ===
+          case "webhooks.listApiKeys": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await listApiKeys(args, userId, pool);
+            break;
+          }
+          case "webhooks.createApiKey": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await createApiKey(args, userId, pool);
+            break;
+          }
+          case "webhooks.revokeApiKey": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await revokeApiKey(args, userId, pool);
+            break;
+          }
+          case "webhooks.listEndpoints": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await listWebhooks(args, userId, pool);
+            break;
+          }
+          case "webhooks.createEndpoint": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await createWebhook(args, userId, pool);
+            break;
+          }
+          case "webhooks.updateEndpoint": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await updateWebhook(args, userId, pool);
+            break;
+          }
+          case "webhooks.deleteEndpoint": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await deleteWebhook(args, userId, pool);
+            break;
+          }
+          case "webhooks.testFire": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await testFireWebhook(args, userId, pool);
+            break;
+          }
+          case "webhooks.getLogs": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getWebhookLogs(args, userId, pool);
+            break;
+          }
+          case "webhooks.getManifest": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getZapierManifest(args, userId, pool);
             break;
           }
           case "markups.listPresets": {
