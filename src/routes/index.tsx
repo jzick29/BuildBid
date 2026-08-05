@@ -319,14 +319,20 @@ function Home() {
           <p className="mt-4 text-center text-gray-600 dark:text-gray-400">Every feature is designed around how trade contractors actually work — not how software companies think they should work.</p>
           <div className="mt-12 grid gap-8 sm:grid-cols-3">
             {[
-              { quote: "I used to spend Sunday nights in Excel. Now I knock out estimates in 5 minutes and my proposals look professional.", name: "— Electrical contractor, 12-person crew" },
-              { quote: "The margin calculator alone has saved me thousands. I caught three bids last month that would have lost money.", name: "— HVAC owner, 8-person crew" },
-              { quote: "The AI estimating is surprisingly good. I described a kitchen remodel and it populated a complete estimate in seconds.", name: "— General contractor, solo operator" },
+              { quote: "I used to spend Sunday nights in Excel. Now I knock out estimates in 5 minutes and my proposals look professional.", name: "Mike R.", company: "Riverside Electric", initials: "MR", color: "bg-indigo-500" },
+              { quote: "The margin calculator alone has saved me thousands. I caught three bids last month that would have lost money.", name: "Dave T.", company: "Summit Air & Heat", initials: "DT", color: "bg-emerald-500" },
+              { quote: "The AI estimating is surprisingly good. I described a kitchen remodel and it populated a complete estimate in seconds.", name: "Sarah K.", company: "Kline Custom Builds", initials: "SK", color: "bg-amber-500" },
             ].map((t, i) => (
               <div key={i} className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
                 <svg className="mb-4 h-8 w-8 text-indigo-300 dark:text-indigo-700" fill="currentColor" viewBox="0 0 24 24"><path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" /></svg>
                 <p className="text-sm italic text-gray-600 dark:text-gray-400">{t.quote}</p>
-                <p className="mt-4 text-xs font-semibold text-gray-900 dark:text-gray-100">{t.name}</p>
+                <div className="mt-4 flex items-center gap-3">
+                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${t.color} text-xs font-bold text-white`}>{t.initials}</span>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{t.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{t.company}</p>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
