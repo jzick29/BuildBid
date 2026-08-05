@@ -64,6 +64,7 @@ const icons: Record<string, string> = {
   import: "M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10",
   share: "M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z",
   signout: "M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1",
+  portal: "M15 9a2 2 0 10-4 0v5a2 2 0 004 0V9zm-6 3a6 6 0 0012 0M9 12a6 6 0 11-12 0m6 0a6 6 0 0112 0m-6 3v2",
 };
 
 type NavSection = { label: string; items: { href: string; label: string; icon: string; adminOnly?: boolean }[] };
@@ -110,6 +111,7 @@ const navSections: NavSection[] = [
       { href: "/integrations", label: "Integrations", icon: "integrations" },
       { href: "/admin", label: "Admin", icon: "admin", adminOnly: true },
       { href: "/import", label: "Import", icon: "import" },
+      { href: "/portal-access", label: "Client Portal", icon: "portal" },
       { href: "/share", label: "Share", icon: "share" },
     ],
   },
@@ -119,7 +121,8 @@ function RootComponent() {
   const location = useLocation();
   const isAuthPage = ["/login", "/signup", "/forgot-password", "/reset-password"].includes(location.pathname);
   const isHome = location.pathname === "/";
-  const showNav = !isAuthPage && !isHome;
+  const isPortal = location.pathname.startsWith("/portal");
+  const showNav = !isAuthPage && !isHome && !isPortal;
 
   return (
     <RootDocument>
