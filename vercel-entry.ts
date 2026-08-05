@@ -1776,6 +1776,66 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             result = { version: vrow };
             break;
           }
+          case "estimates.compareVersions": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const dCmp = args?.data || {};
+            if (!dCmp.estimateId || !dCmp.versionAId || !dCmp.versionBId) { res.statusCode = 400; res.end(JSON.stringify({ error: "estimateId, versionAId and versionBId are required" })); return; }
+            const estOwn = (await pool.query("SELECT id FROM estimates WHERE id=$1 AND user_id=$2", [dCmp.estimateId, userId])).rows[0];
+            if (!estOwn) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; }
+            const [rA, rB] = (await Promise.all([
+              pool.query("SELECT * FROM estimate_versions WHERE id=$1 AND estimate_id=$2", [dCmp.versionAId, dCmp.estimateId]),
+              pool.query("SELECT * FROM estimate_versions WHERE id=$1 AND estimate_id=$2", [dCmp.versionBId, dCmp.estimateId]),
+            ])).map(r => r.rows[0]);
+            if (!rA || !rB) { res.statusCode = 404; res.end(JSON.stringify({ error: "Version not found" })); return; }
+            let snapA: any = { estimate: {}, lineItems: [] }, snapB: any = { estimate: {}, lineItems: [] };
+            try { snapA = JSON.parse(rA.snapshot); } catch {}
+            try { snapB = JSON.parse(rB.snapshot); } catch {}
+            const itemsA: any[] = snapA.lineItems || [];
+            const itemsB: any[] = snapB.lineItems || [];
+            const r2 = (n: number) => Math.round(n * 100) / 100;
+            const itemTotal = (it: any) => (Number(it.quantity) || 0) * (Number(it.unit_cost) || 0) * (1 + (Number(it.markup_percent) || 0) / 100);
+            const keyOf = (it: any) => String(it.id || "") + "|" + String(it.description || "").trim().toLowerCase();
+            const totalA = itemsA.reduce((s: number, it: any) => s + itemTotal(it), 0);
+            const totalB = itemsB.reduce((s: number, it: any) => s + itemTotal(it), 0);
+            const mapB = new Map(itemsB.map((it: any) => [keyOf(it), it]));
+            const rows: any[] = [];
+            const seenB = new Set<string>();
+            const numericDiff = (a: any, b: any) => Math.abs(Number(a || 0) - Number(b || 0)) > 0.001;
+            for (const itA of itemsA) {
+              const k = keyOf(itA);
+              const itB = mapB.get(k);
+              if (itB) {
+                seenB.add(k);
+                const fields: string[] = [];
+                if (numericDiff(itA.quantity, itB.quantity)) fields.push("quantity");
+                if (String(itA.unit || "") !== String(itB.unit || "")) fields.push("unit");
+                if (numericDiff(itA.unit_cost, itB.unit_cost)) fields.push("unit_cost");
+                if (numericDiff(itA.markup_percent, itB.markup_percent)) fields.push("markup_percent");
+                rows.push({ description: itA.description, change: fields.length ? "changed" : "unchanged", fields, a: itA, b: itB, totalA: r2(itemTotal(itA)), totalB: r2(itemTotal(itB)) });
+              } else {
+                rows.push({ description: itA.description, change: "removed", fields: [], a: itA, b: null, totalA: r2(itemTotal(itA)), totalB: 0 });
+              }
+            }
+            for (const itB of itemsB) {
+              if (!seenB.has(keyOf(itB))) rows.push({ description: itB.description, change: "added", fields: [], a: null, b: itB, totalA: 0, totalB: r2(itemTotal(itB)) });
+            }
+            const estFields = ["project_name", "customer_name", "trade", "status", "tax_rate", "notes"];
+            const estChanges = estFields
+              .filter((f) => String(snapA.estimate?.[f] ?? "") !== String(snapB.estimate?.[f] ?? ""))
+              .map((f) => ({ field: f, a: snapA.estimate?.[f] ?? "", b: snapB.estimate?.[f] ?? "" }));
+            result = {
+              versionA: { number: rA.version_number, createdAt: rA.created_at },
+              versionB: { number: rB.version_number, createdAt: rB.created_at },
+              summary: {
+                added: rows.filter((r: any) => r.change === "added").length,
+                removed: rows.filter((r: any) => r.change === "removed").length,
+                changed: rows.filter((r: any) => r.change === "changed").length,
+                totalA: r2(totalA), totalB: r2(totalB), delta: r2(totalB - totalA),
+              },
+              rows, estChanges,
+            };
+            break;
+          }
           case "markups.listPresets": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             const presets = (await pool.query("SELECT * FROM markup_presets WHERE user_id=$1 ORDER BY name", [userId])).rows;

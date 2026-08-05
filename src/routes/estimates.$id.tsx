@@ -26,6 +26,11 @@ function EstimateDetail() {
   const [versions, setVersions] = useState<any[]>([]);
   const [showVersions, setShowVersions] = useState(false);
   const [savingVersion, setSavingVersion] = useState(false);
+  const [compareA, setCompareA] = useState("");
+  const [compareB, setCompareB] = useState("");
+  const [diff, setDiff] = useState<any>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareError, setCompareError] = useState("");
 
   const [newDesc, setNewDesc] = useState("");
   const [newQty, setNewQty] = useState("1");
@@ -357,6 +362,23 @@ function EstimateDetail() {
       body: JSON.stringify({ function: "expenses.getExpenseSummary", args: { data: { estimateId: id } } }),
       credentials: "include",
     }).then(r => r.json()).then(d => { if (d) setExpenseSummary(d); });
+  };
+
+  const handleCompare = async () => {
+    if (!compareA || !compareB) { setCompareError("Select two versions to compare"); return; }
+    if (compareA === compareB) { setCompareError("Pick two different versions"); return; }
+    setCompareLoading(true); setCompareError(""); setDiff(null);
+    try {
+      const res = await fetch("/api/call", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ function: "estimates.compareVersions", args: { data: { estimateId: id, versionAId: compareA, versionBId: compareB } } }),
+        credentials: "include",
+      });
+      const d = await res.json();
+      if (d.error) { setCompareError(d.error); return; }
+      setDiff(d);
+    } catch (e: any) { setCompareError(e.message); }
+    finally { setCompareLoading(false); }
   };
 
   const handleSaveVersion = async () => {
@@ -954,6 +976,23 @@ return (
         </button>
         {showVersions && (
           <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+            {versions.length >= 2 && (
+              <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+                <span className="text-xs font-medium text-gray-500">Compare</span>
+                <select value={compareA} onChange={(e) => setCompareA(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-950">
+                  <option value="">Version A…</option>
+                  {versions.map((v: any) => <option key={v.id} value={v.id}>v{v.version_number} — {new Date(v.created_at).toLocaleDateString()}</option>)}
+                </select>
+                <span className="text-xs text-gray-400">vs</span>
+                <select value={compareB} onChange={(e) => setCompareB(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-950">
+                  <option value="">Version B…</option>
+                  {versions.map((v: any) => <option key={v.id} value={v.id}>v{v.version_number} — {new Date(v.created_at).toLocaleDateString()}</option>)}
+                </select>
+                <button onClick={handleCompare} disabled={compareLoading} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{compareLoading ? "Comparing…" : "Compare"}</button>
+                {diff && <button onClick={() => setDiff(null)} className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">Clear</button>}
+                {compareError && <span className="text-xs text-red-500">{compareError}</span>}
+              </div>
+            )}
             {versions.length === 0 ? (
               <p className="px-4 py-3 text-sm text-gray-500">No versions saved yet.</p>
             ) : (
@@ -973,6 +1012,58 @@ return (
                   ))}
                 </tbody>
               </table>
+            )}
+            {diff && (
+              <div className="border-t border-gray-200 dark:border-gray-800">
+                <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+                  <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900/40 dark:text-green-400">+{diff.summary.added} added</span>
+                  <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-900/40 dark:text-red-400">−{diff.summary.removed} removed</span>
+                  <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">{diff.summary.changed} changed</span>
+                  <span className="text-xs text-gray-500 flex items-center">Total: <b className="ml-1">${diff.summary.totalA.toLocaleString(undefined, { maximumFractionDigits: 2 })} → ${diff.summary.totalB.toLocaleString(undefined, { maximumFractionDigits: 2 })}</b>
+                    <b className={`ml-2 ${diff.summary.delta >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>{diff.summary.delta >= 0 ? "+" : ""}${diff.summary.delta.toLocaleString(undefined, { maximumFractionDigits: 2 })}</b>
+                  </span>
+                </div>
+                {diff.estChanges.length > 0 && (
+                  <div className="px-4 pb-3">
+                    <p className="text-xs font-medium text-gray-500">Estimate-level changes</p>
+                    {diff.estChanges.map((c: any) => (
+                      <p key={c.field} className="mt-1 text-xs"><span className="font-medium capitalize">{c.field.replace("_", " ")}</span>: <span className="line-through text-red-500">{String(c.a)}</span> → <span className="text-green-600 dark:text-green-400">{String(c.b)}</span></p>
+                    ))}
+                  </div>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 dark:bg-gray-950">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-medium text-gray-600 dark:text-gray-400">Line Item</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600 dark:text-gray-400">v{diff.versionA.number} Qty</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600 dark:text-gray-400">v{diff.versionA.number} Cost</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600 dark:text-gray-400">v{diff.versionA.number} Total</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600 dark:text-gray-400">v{diff.versionB.number} Qty</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600 dark:text-gray-400">v{diff.versionB.number} Cost</th>
+                        <th className="px-4 py-2 text-right font-medium text-gray-600 dark:text-gray-400">v{diff.versionB.number} Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                      {diff.rows.map((r: any, idx: number) => (
+                        <tr key={idx} className={r.change === "added" ? "bg-green-50/60 dark:bg-green-950/20" : r.change === "removed" ? "bg-red-50/60 dark:bg-red-950/20" : r.change === "changed" ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}>
+                          <td className="px-4 py-2">
+                            <span className="font-medium">{r.description}</span>
+                            {r.change !== "unchanged" && <span className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${r.change === "added" ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" : r.change === "removed" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400"}`}>{r.change === "added" ? "ADDED" : r.change === "removed" ? "REMOVED" : "CHANGED"}</span>}
+                            {r.fields.length > 0 && <span className="ml-1 text-[10px] text-gray-400">({r.fields.join(", ")})</span>}
+                          </td>
+                          <td className="px-4 py-2 text-right">{r.a ? r.a.quantity : "—"}</td>
+                          <td className="px-4 py-2 text-right">{r.a ? "$" + Number(r.a.unit_cost).toFixed(2) : "—"}</td>
+                          <td className="px-4 py-2 text-right">{r.change === "removed" ? <span className="text-red-500 line-through">${r.totalA.toFixed(2)}</span> : "$" + r.totalA.toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right">{r.b ? r.b.quantity : "—"}</td>
+                          <td className="px-4 py-2 text-right">{r.b ? "$" + Number(r.b.unit_cost).toFixed(2) : "—"}</td>
+                          <td className="px-4 py-2 text-right">{r.change === "added" ? <span className="text-green-600 dark:text-green-400">+${r.totalB.toFixed(2)}</span> : "$" + r.totalB.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )}
           </div>
         )}
