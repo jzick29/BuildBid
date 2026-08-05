@@ -18,6 +18,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as PriceListsRouteImport } from './routes/price-lists'
+import { Route as PortalAccessRouteImport } from './routes/portal-access'
 import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as PaymentSuccessRouteImport } from './routes/payment-success'
 import { Route as MaterialsRouteImport } from './routes/materials'
@@ -38,6 +39,7 @@ import { Route as AutomationRouteImport } from './routes/automation'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PortalIndexRouteImport } from './routes/portal/index'
 import { Route as FreeEstimatingTemplatePdfIndexRouteImport } from './routes/free-estimating-template-pdf/index'
 import { Route as EstimatesIndexRouteImport } from './routes/estimates.index'
 import { Route as TradeSlugRouteImport } from './routes/trade.$slug'
@@ -45,12 +47,15 @@ import { Route as SubscribeSuccessRouteImport } from './routes/subscribe.success
 import { Route as SubscribeCancelRouteImport } from './routes/subscribe.cancel'
 import { Route as SubscribePlanRouteImport } from './routes/subscribe.$plan'
 import { Route as SignEstimateIdRouteImport } from './routes/sign.$estimateId'
+import { Route as PortalLoginRouteImport } from './routes/portal/login'
 import { Route as InvoicesIdRouteImport } from './routes/invoices.$id'
 import { Route as EstimatesNewRouteImport } from './routes/estimates.new'
 import { Route as EstimatesIdRouteImport } from './routes/estimates.$id'
 import { Route as ContractsIdRouteImport } from './routes/contracts.$id'
 import { Route as CoIdRouteImport } from './routes/co.$id'
 import { Route as ChangeOrdersIdRouteImport } from './routes/change-orders.$id'
+import { Route as PortalEstimateIdRouteImport } from './routes/portal/estimate.$id'
+import { Route as PortalChangeOrderIdRouteImport } from './routes/portal/change-order.$id'
 
 const TemplatesRoute = TemplatesRouteImport.update({
   id: '/templates',
@@ -95,6 +100,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const PriceListsRoute = PriceListsRouteImport.update({
   id: '/price-lists',
   path: '/price-lists',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalAccessRoute = PortalAccessRouteImport.update({
+  id: '/portal-access',
+  path: '/portal-access',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PipelineRoute = PipelineRouteImport.update({
@@ -198,6 +208,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PortalIndexRoute = PortalIndexRouteImport.update({
+  id: '/portal/',
+  path: '/portal/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FreeEstimatingTemplatePdfIndexRoute =
   FreeEstimatingTemplatePdfIndexRouteImport.update({
     id: '/free-estimating-template-pdf/',
@@ -234,6 +249,11 @@ const SignEstimateIdRoute = SignEstimateIdRouteImport.update({
   path: '/sign/$estimateId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PortalLoginRoute = PortalLoginRouteImport.update({
+  id: '/portal/login',
+  path: '/portal/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InvoicesIdRoute = InvoicesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -264,6 +284,16 @@ const ChangeOrdersIdRoute = ChangeOrdersIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ChangeOrdersRoute,
 } as any)
+const PortalEstimateIdRoute = PortalEstimateIdRouteImport.update({
+  id: '/portal/estimate/$id',
+  path: '/portal/estimate/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalChangeOrderIdRoute = PortalChangeOrderIdRouteImport.update({
+  id: '/portal/change-order/$id',
+  path: '/portal/change-order/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -286,6 +316,7 @@ export interface FileRoutesByFullPath {
   '/materials': typeof MaterialsRoute
   '/payment-success': typeof PaymentSuccessRoute
   '/pipeline': typeof PipelineRoute
+  '/portal-access': typeof PortalAccessRoute
   '/price-lists': typeof PriceListsRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schedule': typeof ScheduleRoute
@@ -301,6 +332,7 @@ export interface FileRoutesByFullPath {
   '/estimates/$id': typeof EstimatesIdRoute
   '/estimates/new': typeof EstimatesNewRoute
   '/invoices/$id': typeof InvoicesIdRoute
+  '/portal/login': typeof PortalLoginRoute
   '/sign/$estimateId': typeof SignEstimateIdRoute
   '/subscribe/$plan': typeof SubscribePlanRoute
   '/subscribe/cancel': typeof SubscribeCancelRoute
@@ -308,6 +340,9 @@ export interface FileRoutesByFullPath {
   '/trade/$slug': typeof TradeSlugRoute
   '/estimates/': typeof EstimatesIndexRoute
   '/free-estimating-template-pdf/': typeof FreeEstimatingTemplatePdfIndexRoute
+  '/portal/': typeof PortalIndexRoute
+  '/portal/change-order/$id': typeof PortalChangeOrderIdRoute
+  '/portal/estimate/$id': typeof PortalEstimateIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -329,6 +364,7 @@ export interface FileRoutesByTo {
   '/materials': typeof MaterialsRoute
   '/payment-success': typeof PaymentSuccessRoute
   '/pipeline': typeof PipelineRoute
+  '/portal-access': typeof PortalAccessRoute
   '/price-lists': typeof PriceListsRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schedule': typeof ScheduleRoute
@@ -344,6 +380,7 @@ export interface FileRoutesByTo {
   '/estimates/$id': typeof EstimatesIdRoute
   '/estimates/new': typeof EstimatesNewRoute
   '/invoices/$id': typeof InvoicesIdRoute
+  '/portal/login': typeof PortalLoginRoute
   '/sign/$estimateId': typeof SignEstimateIdRoute
   '/subscribe/$plan': typeof SubscribePlanRoute
   '/subscribe/cancel': typeof SubscribeCancelRoute
@@ -351,6 +388,9 @@ export interface FileRoutesByTo {
   '/trade/$slug': typeof TradeSlugRoute
   '/estimates': typeof EstimatesIndexRoute
   '/free-estimating-template-pdf': typeof FreeEstimatingTemplatePdfIndexRoute
+  '/portal': typeof PortalIndexRoute
+  '/portal/change-order/$id': typeof PortalChangeOrderIdRoute
+  '/portal/estimate/$id': typeof PortalEstimateIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -374,6 +414,7 @@ export interface FileRoutesById {
   '/materials': typeof MaterialsRoute
   '/payment-success': typeof PaymentSuccessRoute
   '/pipeline': typeof PipelineRoute
+  '/portal-access': typeof PortalAccessRoute
   '/price-lists': typeof PriceListsRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schedule': typeof ScheduleRoute
@@ -389,6 +430,7 @@ export interface FileRoutesById {
   '/estimates/$id': typeof EstimatesIdRoute
   '/estimates/new': typeof EstimatesNewRoute
   '/invoices/$id': typeof InvoicesIdRoute
+  '/portal/login': typeof PortalLoginRoute
   '/sign/$estimateId': typeof SignEstimateIdRoute
   '/subscribe/$plan': typeof SubscribePlanRoute
   '/subscribe/cancel': typeof SubscribeCancelRoute
@@ -396,6 +438,9 @@ export interface FileRoutesById {
   '/trade/$slug': typeof TradeSlugRoute
   '/estimates/': typeof EstimatesIndexRoute
   '/free-estimating-template-pdf/': typeof FreeEstimatingTemplatePdfIndexRoute
+  '/portal/': typeof PortalIndexRoute
+  '/portal/change-order/$id': typeof PortalChangeOrderIdRoute
+  '/portal/estimate/$id': typeof PortalEstimateIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -420,6 +465,7 @@ export interface FileRouteTypes {
     | '/materials'
     | '/payment-success'
     | '/pipeline'
+    | '/portal-access'
     | '/price-lists'
     | '/reset-password'
     | '/schedule'
@@ -435,6 +481,7 @@ export interface FileRouteTypes {
     | '/estimates/$id'
     | '/estimates/new'
     | '/invoices/$id'
+    | '/portal/login'
     | '/sign/$estimateId'
     | '/subscribe/$plan'
     | '/subscribe/cancel'
@@ -442,6 +489,9 @@ export interface FileRouteTypes {
     | '/trade/$slug'
     | '/estimates/'
     | '/free-estimating-template-pdf/'
+    | '/portal/'
+    | '/portal/change-order/$id'
+    | '/portal/estimate/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -463,6 +513,7 @@ export interface FileRouteTypes {
     | '/materials'
     | '/payment-success'
     | '/pipeline'
+    | '/portal-access'
     | '/price-lists'
     | '/reset-password'
     | '/schedule'
@@ -478,6 +529,7 @@ export interface FileRouteTypes {
     | '/estimates/$id'
     | '/estimates/new'
     | '/invoices/$id'
+    | '/portal/login'
     | '/sign/$estimateId'
     | '/subscribe/$plan'
     | '/subscribe/cancel'
@@ -485,6 +537,9 @@ export interface FileRouteTypes {
     | '/trade/$slug'
     | '/estimates'
     | '/free-estimating-template-pdf'
+    | '/portal'
+    | '/portal/change-order/$id'
+    | '/portal/estimate/$id'
   id:
     | '__root__'
     | '/'
@@ -507,6 +562,7 @@ export interface FileRouteTypes {
     | '/materials'
     | '/payment-success'
     | '/pipeline'
+    | '/portal-access'
     | '/price-lists'
     | '/reset-password'
     | '/schedule'
@@ -522,6 +578,7 @@ export interface FileRouteTypes {
     | '/estimates/$id'
     | '/estimates/new'
     | '/invoices/$id'
+    | '/portal/login'
     | '/sign/$estimateId'
     | '/subscribe/$plan'
     | '/subscribe/cancel'
@@ -529,6 +586,9 @@ export interface FileRouteTypes {
     | '/trade/$slug'
     | '/estimates/'
     | '/free-estimating-template-pdf/'
+    | '/portal/'
+    | '/portal/change-order/$id'
+    | '/portal/estimate/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -552,6 +612,7 @@ export interface RootRouteChildren {
   MaterialsRoute: typeof MaterialsRoute
   PaymentSuccessRoute: typeof PaymentSuccessRoute
   PipelineRoute: typeof PipelineRoute
+  PortalAccessRoute: typeof PortalAccessRoute
   PriceListsRoute: typeof PriceListsRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   ScheduleRoute: typeof ScheduleRoute
@@ -562,9 +623,13 @@ export interface RootRouteChildren {
   TeamRoute: typeof TeamRoute
   TemplatesRoute: typeof TemplatesRoute
   CoIdRoute: typeof CoIdRoute
+  PortalLoginRoute: typeof PortalLoginRoute
   SignEstimateIdRoute: typeof SignEstimateIdRoute
   TradeSlugRoute: typeof TradeSlugRoute
   FreeEstimatingTemplatePdfIndexRoute: typeof FreeEstimatingTemplatePdfIndexRoute
+  PortalIndexRoute: typeof PortalIndexRoute
+  PortalChangeOrderIdRoute: typeof PortalChangeOrderIdRoute
+  PortalEstimateIdRoute: typeof PortalEstimateIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -630,6 +695,13 @@ declare module '@tanstack/react-router' {
       path: '/price-lists'
       fullPath: '/price-lists'
       preLoaderRoute: typeof PriceListsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal-access': {
+      id: '/portal-access'
+      path: '/portal-access'
+      fullPath: '/portal-access'
+      preLoaderRoute: typeof PortalAccessRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pipeline': {
@@ -772,6 +844,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/portal/': {
+      id: '/portal/'
+      path: '/portal'
+      fullPath: '/portal/'
+      preLoaderRoute: typeof PortalIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/free-estimating-template-pdf/': {
       id: '/free-estimating-template-pdf/'
       path: '/free-estimating-template-pdf'
@@ -821,6 +900,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignEstimateIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/portal/login': {
+      id: '/portal/login'
+      path: '/portal/login'
+      fullPath: '/portal/login'
+      preLoaderRoute: typeof PortalLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/invoices/$id': {
       id: '/invoices/$id'
       path: '/$id'
@@ -862,6 +948,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/change-orders/$id'
       preLoaderRoute: typeof ChangeOrdersIdRouteImport
       parentRoute: typeof ChangeOrdersRoute
+    }
+    '/portal/estimate/$id': {
+      id: '/portal/estimate/$id'
+      path: '/portal/estimate/$id'
+      fullPath: '/portal/estimate/$id'
+      preLoaderRoute: typeof PortalEstimateIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/change-order/$id': {
+      id: '/portal/change-order/$id'
+      path: '/portal/change-order/$id'
+      fullPath: '/portal/change-order/$id'
+      preLoaderRoute: typeof PortalChangeOrderIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -955,6 +1055,7 @@ const rootRouteChildren: RootRouteChildren = {
   MaterialsRoute: MaterialsRoute,
   PaymentSuccessRoute: PaymentSuccessRoute,
   PipelineRoute: PipelineRoute,
+  PortalAccessRoute: PortalAccessRoute,
   PriceListsRoute: PriceListsRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   ScheduleRoute: ScheduleRoute,
@@ -965,9 +1066,13 @@ const rootRouteChildren: RootRouteChildren = {
   TeamRoute: TeamRoute,
   TemplatesRoute: TemplatesRoute,
   CoIdRoute: CoIdRoute,
+  PortalLoginRoute: PortalLoginRoute,
   SignEstimateIdRoute: SignEstimateIdRoute,
   TradeSlugRoute: TradeSlugRoute,
   FreeEstimatingTemplatePdfIndexRoute: FreeEstimatingTemplatePdfIndexRoute,
+  PortalIndexRoute: PortalIndexRoute,
+  PortalChangeOrderIdRoute: PortalChangeOrderIdRoute,
+  PortalEstimateIdRoute: PortalEstimateIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

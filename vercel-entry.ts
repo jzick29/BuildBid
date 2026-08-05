@@ -86,6 +86,51 @@ async function handleLogout(req: IncomingMessage) {
   return resp;
 }
 
+const CLIENT_SESSION_COOKIE = "buildbid_client_session";
+const CLIENT_SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
+
+// Resolve the current portal (client) user from the client session cookie, or null.
+async function getClientUser(req: IncomingMessage) {
+  const token = parseCookies(req)[CLIENT_SESSION_COOKIE];
+  if (!token) return null;
+  const pool = getPool();
+  const r = await pool.query(
+    "SELECT cu.id, cu.user_id, cu.email, cu.name, cu.company_name, cu.active FROM client_sessions cs JOIN client_users cu ON cu.id = cs.client_user_id WHERE cs.id=$1 AND cs.expires_at > NOW()",
+    [token]
+  );
+  if (!r.rows[0] || r.rows[0].active !== 1) return null;
+  return r.rows[0];
+}
+
+async function handleClientLogin(body: any) {
+  const { email, password } = body || {};
+  if (!email || !password) return new Response(JSON.stringify({ error: "Email and password are required" }), { status: 400, headers: { "Content-Type": "application/json" } });
+  const pool = getPool();
+  const r = await pool.query("SELECT id, user_id, email, name, company_name, password_hash, active FROM client_users WHERE LOWER(email)=LOWER($1)", [email]);
+  const row = r.rows[0];
+  if (!row || !bcrypt.compareSync(password, row.password_hash)) return new Response(JSON.stringify({ error: "Invalid email or password" }), { status: 401, headers: { "Content-Type": "application/json" } });
+  if (row.active !== 1) return new Response(JSON.stringify({ error: "This portal account has been disabled. Contact your contractor." }), { status: 403, headers: { "Content-Type": "application/json" } });
+  const token = crypto.randomUUID();
+  await pool.query("INSERT INTO client_sessions (id, client_user_id, expires_at) VALUES ($1,$2,$3)", [token, row.id, new Date(Date.now() + CLIENT_SESSION_DURATION_MS).toISOString()]);
+  const resp = new Response(JSON.stringify({ success: true, user: { id: row.id, email: row.email, name: row.name, company_name: row.company_name } }), { status: 200, headers: { "Content-Type": "application/json" } });
+  resp.headers.append("Set-Cookie", `${CLIENT_SESSION_COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${30 * 86400}`);
+  return resp;
+}
+
+async function handleClientLogout(req: IncomingMessage) {
+  const token = parseCookies(req)[CLIENT_SESSION_COOKIE];
+  if (token) { const pool = getPool(); await pool.query("DELETE FROM client_sessions WHERE id=$1", [token]); }
+  const resp = new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+  resp.headers.append("Set-Cookie", `${CLIENT_SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`);
+  return resp;
+}
+
+async function handleClientMe(req: IncomingMessage) {
+  const client = await getClientUser(req);
+  if (!client) return new Response(JSON.stringify({ user: null }), { status: 200, headers: { "Content-Type": "application/json" } });
+  return new Response(JSON.stringify({ user: { id: client.id, email: client.email, name: client.name, company_name: client.company_name } }), { status: 200, headers: { "Content-Type": "application/json" } });
+}
+
 function toWebRequest(req: IncomingMessage): Request {
   const host = req.headers.host ?? "localhost";
   const proto = (req.headers["x-forwarded-proto"] as string) ?? "https";
@@ -210,6 +255,13 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         `CREATE TABLE IF NOT EXISTS leads (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, trade TEXT DEFAULT '', source TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS time_entries (id TEXT PRIMARY KEY, estimate_id TEXT NOT NULL REFERENCES estimates(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id), description TEXT DEFAULT '', hours REAL NOT NULL DEFAULT 0, crew_member TEXT DEFAULT '', date TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS expenses (id TEXT PRIMARY KEY, estimate_id TEXT NOT NULL REFERENCES estimates(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id), description TEXT DEFAULT '', amount DECIMAL(12,2) NOT NULL DEFAULT 0, category TEXT NOT NULL DEFAULT 'materials', vendor TEXT DEFAULT '', expense_date TEXT NOT NULL DEFAULT '', receipt_url TEXT DEFAULT NULL, notes TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        // === customer portal ===
+        `CREATE TABLE IF NOT EXISTS client_users (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, email TEXT NOT NULL, password_hash TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', company_name TEXT DEFAULT '', active INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (user_id, email))`,
+        `CREATE TABLE IF NOT EXISTS client_sessions (id TEXT PRIMARY KEY, client_user_id TEXT NOT NULL REFERENCES client_users(id) ON DELETE CASCADE, expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `ALTER TABLE estimates ADD COLUMN IF NOT EXISTS client_user_id TEXT REFERENCES client_users(id) ON DELETE SET NULL`,
+        `CREATE INDEX IF NOT EXISTS idx_cu_user ON client_users(user_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_cs_client ON client_sessions(client_user_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_estimates_client ON estimates(client_user_id)`,
         ];
         for (const t of appTables) {
         try { await pool.query(t); } catch (e) { console.error("App table create error:", e); }
@@ -278,6 +330,8 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
       const pool = getPool();
       let userId = "";
       if (token) { const r = await pool.query("SELECT u.id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [token]); if (r.rows[0]) userId = r.rows[0].id; }
+      let clientUser: any = null;
+      try { clientUser = await getClientUser(req); } catch (e: any) { console.error("[portal] client session check failed:", e?.message || e); }
       let result: any;
       try {
         switch (fnName) {
@@ -1947,12 +2001,151 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             break;
           }
 
+          // === customer portal: contractor management ===
+          case "portalClient.listClientUsers": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const cuRows = (await pool.query("SELECT cu.id, cu.email, cu.name, cu.company_name, cu.active, cu.created_at, (SELECT COUNT(*) FROM estimates e WHERE e.client_user_id = cu.id) as estimate_count FROM client_users cu WHERE cu.user_id=$1 ORDER BY cu.created_at DESC", [userId])).rows;
+            result = { clientUsers: cuRows };
+            break;
+          }
+          case "portalClient.createClientUser": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const dcu = args?.data || {};
+            if (!dcu.email?.trim() || !dcu.password || dcu.password.length < 6) { res.statusCode = 400; res.end(JSON.stringify({ error: "Email and password (min 6 chars) are required" })); return; }
+            const dup = (await pool.query("SELECT id FROM client_users WHERE user_id=$1 AND LOWER(email)=LOWER($2)", [userId, dcu.email.trim()])).rows[0];
+            if (dup) { res.statusCode = 409; res.end(JSON.stringify({ error: "A portal user with this email already exists" })); return; }
+            const cid = crypto.randomUUID();
+            await pool.query("INSERT INTO client_users (id, user_id, email, password_hash, name, company_name) VALUES ($1,$2,$3,$4,$5,$6)",
+              [cid, userId, dcu.email.trim(), bcrypt.hashSync(dcu.password, 10), dcu.name?.trim() || dcu.email.split("@")[0], dcu.companyName || ""]);
+            result = { id: cid };
+            break;
+          }
+          case "portalClient.updateClientUser": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const duu = args?.data || {};
+            if (!duu.id) { res.statusCode = 400; res.end(JSON.stringify({ error: "Missing id" })); return; }
+            const ufields: string[] = []; const uvals: any[] = [];
+            if (duu.name !== undefined) { ufields.push("name=$"+(uvals.length+1)); uvals.push(duu.name.trim()); }
+            if (duu.companyName !== undefined) { ufields.push("company_name=$"+(uvals.length+1)); uvals.push(duu.companyName); }
+            if (duu.active !== undefined) { ufields.push("active=$"+(uvals.length+1)); uvals.push(duu.active ? 1 : 0); }
+            if (ufields.length) { ufields.push("updated_at=NOW()"); uvals.push(duu.id, userId); await pool.query("UPDATE client_users SET "+ufields.join(", ")+" WHERE id=$"+(uvals.length-1)+" AND user_id=$"+(uvals.length), uvals); }
+            result = { success: true };
+            break;
+          }
+          case "portalClient.deleteClientUser": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const ddu = args?.data || {};
+            if (!ddu.id) { res.statusCode = 400; res.end(JSON.stringify({ error: "Missing id" })); return; }
+            await pool.query("UPDATE estimates SET client_user_id = NULL WHERE client_user_id = $1 AND user_id = $2", [ddu.id, userId]);
+            await pool.query("DELETE FROM client_sessions WHERE client_user_id = $1", [ddu.id]);
+            await pool.query("DELETE FROM client_users WHERE id = $1 AND user_id = $2", [ddu.id, userId]);
+            result = { success: true };
+            break;
+          }
+          case "portalClient.resetClientPassword": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const dru = args?.data || {};
+            if (!dru.id || !dru.password || dru.password.length < 6) { res.statusCode = 400; res.end(JSON.stringify({ error: "Password must be at least 6 characters" })); return; }
+            await pool.query("UPDATE client_users SET password_hash=$1, updated_at=NOW() WHERE id=$2 AND user_id=$3", [bcrypt.hashSync(dru.password, 10), dru.id, userId]);
+            await pool.query("DELETE FROM client_sessions WHERE client_user_id = $1", [dru.id]);
+            result = { success: true };
+            break;
+          }
+          case "portalClient.listEstimates": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = (await pool.query("SELECT id, project_name, customer_name, trade, status, client_user_id FROM estimates WHERE user_id=$1 ORDER BY updated_at DESC", [userId])).rows;
+            break;
+          }
+          case "portalClient.linkEstimate": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const dlu2 = args?.data || {};
+            if (!dlu2.estimateId || !dlu2.clientUserId) { res.statusCode = 400; res.end(JSON.stringify({ error: "estimateId and clientUserId required" })); return; }
+            const ownsCu = (await pool.query("SELECT id FROM client_users WHERE id=$1 AND user_id=$2", [dlu2.clientUserId, userId])).rows[0];
+            if (!ownsCu) { res.statusCode = 404; res.end(JSON.stringify({ error: "Client user not found" })); return; }
+            await pool.query("UPDATE estimates SET client_user_id=$1 WHERE id=$2 AND user_id=$3", [dlu2.clientUserId, dlu2.estimateId, userId]);
+            result = { success: true };
+            break;
+          }
+          case "portalClient.unlinkEstimate": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const dulu = args?.data || {};
+            if (!dulu.estimateId) { res.statusCode = 400; res.end(JSON.stringify({ error: "estimateId required" })); return; }
+            await pool.query("UPDATE estimates SET client_user_id=NULL WHERE id=$1 AND user_id=$2", [dulu.estimateId, userId]);
+            result = { success: true };
+            break;
+          }
+          // === customer portal: client-facing ===
+          case "portal.getDashboard": {
+            if (!clientUser) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const ests = (await pool.query("SELECT e.id, e.project_name, e.customer_name, e.trade, e.status, e.created_at, e.updated_at, e.signed_at, (SELECT COUNT(*) FROM change_orders co WHERE co.estimate_id=e.id) as change_order_count FROM estimates e WHERE e.client_user_id=$1 ORDER BY e.updated_at DESC", [clientUser.id])).rows;
+            const withTotals = [];
+            for (const est of ests) {
+              const tot = (await pool.query("SELECT COALESCE(SUM((quantity*unit_cost)*(1+COALESCE(markup_percent,0)/100)),0) as t FROM line_items WHERE estimate_id=$1", [est.id])).rows[0].t;
+              withTotals.push({ ...est, total: Math.round(parseFloat(tot || "0") * 100) / 100 });
+            }
+            const cos = (await pool.query("SELECT co.id, co.estimate_id, co.title, co.description, co.status, co.total_cost, co.created_at, co.updated_at, e.project_name, e.customer_name FROM change_orders co JOIN estimates e ON e.id=co.estimate_id WHERE e.client_user_id=$1 ORDER BY co.created_at DESC", [clientUser.id])).rows;
+            result = { estimates: withTotals, changeOrders: cos };
+            break;
+          }
+          case "portal.getEstimate": {
+            if (!clientUser) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const dpe = args?.data || {};
+            const est = (await pool.query("SELECT * FROM estimates WHERE id=$1 AND client_user_id=$2", [dpe.estimateId, clientUser.id])).rows[0];
+            if (!est) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; }
+            const items = (await pool.query("SELECT * FROM line_items WHERE estimate_id=$1 ORDER BY sort_order", [dpe.estimateId])).rows;
+            const total = items.reduce((s: number, i: any) => s + (i.quantity * i.unit_cost) * (1 + (i.markup_percent || 0) / 100), 0);
+            const props = (await pool.query("SELECT id, proposal_number, terms, created_at, pdf_data FROM proposals WHERE estimate_id=$1 ORDER BY created_at DESC", [dpe.estimateId])).rows;
+            const cos2 = (await pool.query("SELECT co.*, (SELECT COALESCE(SUM((quantity*unit_cost)*(1+COALESCE(markup_percent,0)/100)),0) FROM change_order_items WHERE change_order_id=co.id) as calc_total FROM change_orders co WHERE co.estimate_id=$1 ORDER BY co.created_at DESC", [dpe.estimateId])).rows;
+            result = { estimate: est, lineItems: items, total: Math.round(total * 100) / 100, proposals: props, changeOrders: cos2 };
+            break;
+          }
+          case "portal.getChangeOrder": {
+            if (!clientUser) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const dco2 = args?.data || {};
+            const co = (await pool.query("SELECT co.*, e.project_name, e.customer_name, e.id as estimate_id FROM change_orders co JOIN estimates e ON e.id=co.estimate_id WHERE co.id=$1 AND e.client_user_id=$2", [dco2.id, clientUser.id])).rows[0];
+            if (!co) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; }
+            const items = (await pool.query("SELECT * FROM change_order_items WHERE change_order_id=$1 ORDER BY sort_order", [dco2.id])).rows;
+            result = { changeOrder: co, items };
+            break;
+          }
+          case "portal.respondChangeOrder": {
+            if (!clientUser) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const dresp = args?.data || {};
+            const co = (await pool.query("SELECT co.*, e.user_id as est_user_id, e.project_name FROM change_orders co JOIN estimates e ON e.id=co.estimate_id WHERE co.id=$1 AND e.client_user_id=$2", [dresp.changeOrderId, clientUser.id])).rows[0];
+            if (!co) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; }
+            if (co.status !== "sent" && co.status !== "submitted") { res.statusCode = 409; res.end(JSON.stringify({ error: "This change order is not awaiting a response" })); return; }
+            const approved = !!dresp.approved;
+            const newStatus = approved ? "approved" : "rejected";
+            if (approved) {
+              await pool.query("UPDATE change_orders SET status='approved', approved_at=NOW(), approved_by=$1, updated_at=NOW() WHERE id=$2", [co.est_user_id, dresp.changeOrderId]);
+            } else {
+              await pool.query("UPDATE change_orders SET status='rejected', rejected_at=NOW(), rejected_by=$1, reject_reason=$2, updated_at=NOW() WHERE id=$3", [co.est_user_id, dresp.reason || "", dresp.changeOrderId]);
+            }
+            await pool.query("INSERT INTO change_order_history (id, change_order_id, user_id, action, old_status, new_status, comment) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+              [crypto.randomUUID(), dresp.changeOrderId, co.est_user_id, approved ? "approved" : "rejected", co.status, newStatus, (clientUser.name || clientUser.email) + " via customer portal" + (dresp.reason ? ": " + dresp.reason : "")]);
+            result = { status: newStatus };
+            break;
+          }
+          case "portal.signEstimate": {
+            if (!clientUser) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const dse = args?.data || {};
+            if (!dse.estimateId || !dse.signatureData) { res.statusCode = 400; res.end(JSON.stringify({ error: "estimateId and signatureData are required" })); return; }
+            const est = (await pool.query("SELECT id FROM estimates WHERE id=$1 AND client_user_id=$2", [dse.estimateId, clientUser.id])).rows[0];
+            if (!est) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; }
+            await pool.query("UPDATE estimates SET signature_data=$1, signed_at=NOW(), status=CASE WHEN status='draft' THEN 'sent' ELSE status END WHERE id=$2", [dse.signatureData, dse.estimateId]);
+            result = { success: true };
+            break;
+          }
           default: { res.statusCode = 501; res.end(JSON.stringify({ error: "Unknown: " + fnName })); return; }
         }
         res.statusCode = 200; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(result));
       } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message || "Internal error" })); }
       return;
     }
+    // === Customer portal auth ===
+    if (req.method === "POST" && url === "/api/portal/login") { const wr = await handleClientLogin(await readBody(req)); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
+    if (req.method === "POST" && url === "/api/portal/logout") { const wr = await handleClientLogout(req); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
+    if (req.method === "GET" && url === "/api/portal/me") { const wr = await handleClientMe(req); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
     // SSR — static import
     const webRes = await handler.fetch(toWebRequest(req));
     res.statusCode = webRes.status;
