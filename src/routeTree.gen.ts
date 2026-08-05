@@ -17,6 +17,7 @@ import { Route as ShareRouteImport } from './routes/share'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as PriceListsRouteImport } from './routes/price-lists'
 import { Route as PortalAccessRouteImport } from './routes/portal-access'
 import { Route as PipelineRouteImport } from './routes/pipeline'
@@ -96,6 +97,11 @@ const ScheduleRoute = ScheduleRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PriceListsRoute = PriceListsRouteImport.update({
@@ -325,6 +331,7 @@ export interface FileRoutesByFullPath {
   '/pipeline': typeof PipelineRoute
   '/portal-access': typeof PortalAccessRoute
   '/price-lists': typeof PriceListsRoute
+  '/reports': typeof ReportsRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schedule': typeof ScheduleRoute
   '/settings': typeof SettingsRoute
@@ -374,6 +381,7 @@ export interface FileRoutesByTo {
   '/pipeline': typeof PipelineRoute
   '/portal-access': typeof PortalAccessRoute
   '/price-lists': typeof PriceListsRoute
+  '/reports': typeof ReportsRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schedule': typeof ScheduleRoute
   '/settings': typeof SettingsRoute
@@ -425,6 +433,7 @@ export interface FileRoutesById {
   '/pipeline': typeof PipelineRoute
   '/portal-access': typeof PortalAccessRoute
   '/price-lists': typeof PriceListsRoute
+  '/reports': typeof ReportsRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schedule': typeof ScheduleRoute
   '/settings': typeof SettingsRoute
@@ -477,6 +486,7 @@ export interface FileRouteTypes {
     | '/pipeline'
     | '/portal-access'
     | '/price-lists'
+    | '/reports'
     | '/reset-password'
     | '/schedule'
     | '/settings'
@@ -526,6 +536,7 @@ export interface FileRouteTypes {
     | '/pipeline'
     | '/portal-access'
     | '/price-lists'
+    | '/reports'
     | '/reset-password'
     | '/schedule'
     | '/settings'
@@ -576,6 +587,7 @@ export interface FileRouteTypes {
     | '/pipeline'
     | '/portal-access'
     | '/price-lists'
+    | '/reports'
     | '/reset-password'
     | '/schedule'
     | '/settings'
@@ -627,6 +639,7 @@ export interface RootRouteChildren {
   PipelineRoute: typeof PipelineRoute
   PortalAccessRoute: typeof PortalAccessRoute
   PriceListsRoute: typeof PriceListsRoute
+  ReportsRoute: typeof ReportsRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   ScheduleRoute: typeof ScheduleRoute
   SettingsRoute: typeof SettingsRoute
@@ -701,6 +714,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/price-lists': {
@@ -1078,6 +1098,7 @@ const rootRouteChildren: RootRouteChildren = {
   PipelineRoute: PipelineRoute,
   PortalAccessRoute: PortalAccessRoute,
   PriceListsRoute: PriceListsRoute,
+  ReportsRoute: ReportsRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   ScheduleRoute: ScheduleRoute,
   SettingsRoute: SettingsRoute,
