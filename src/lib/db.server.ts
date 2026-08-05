@@ -464,6 +464,16 @@ export async function getDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_lip_line_item ON line_item_photos(line_item_id);
+    CREATE TABLE IF NOT EXISTS photos (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      estimate_id TEXT NOT NULL REFERENCES estimates(id) ON DELETE CASCADE,
+      url TEXT NOT NULL,
+      caption TEXT DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_photos_estimate ON photos(estimate_id);
+    CREATE INDEX IF NOT EXISTS idx_photos_user ON photos(user_id);
     CREATE TABLE IF NOT EXISTS change_orders (
       id TEXT PRIMARY KEY,
       estimate_id TEXT NOT NULL REFERENCES estimates(id) ON DELETE CASCADE,

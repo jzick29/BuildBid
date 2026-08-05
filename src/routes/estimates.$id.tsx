@@ -2,6 +2,7 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect, useCallback } from "react";
 import { SignaturePad } from "~/components/SignaturePad";
 import { MobileEstimateActions } from "~/components/MobileEstimateActions";
+import { PhotoUpload } from "~/components/PhotoUpload";
 
 export const Route = createFileRoute("/estimates/$id")({
   loader: async () => ({}),
@@ -64,6 +65,7 @@ function EstimateDetail() {
   const [expenseNotes, setExpenseNotes] = useState("");
   const [savingExpense, setSavingExpense] = useState(false);
   const [signedByName, setSignedByName] = useState("");
+  const [photos, setPhotos] = useState<any[]>([]);
 
   const loadData = useCallback(async () => {
     try {
@@ -133,9 +135,15 @@ function EstimateDetail() {
             body: JSON.stringify({ function: "expenses.getExpenseSummary", args: { data: { estimateId: id } } }),
             credentials: "include",
           }).then(r => r.json()),
+          fetch("/api/call", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ function: "photos.getPhotosByEstimate", args: { data: { estimateId: id } } }),
+            credentials: "include",
+          }).then(r => r.json()),
         ]);
       })
-      .then(([_est, mpData, verData, propData, teData, tsData, expData, expSumData]) => {
+      .then(([_est, mpData, verData, propData, teData, tsData, expData, expSumData, photosData]) => {
         if (mpData?.presets) setMarkupPresets(mpData.presets);
         if (verData?.versions) setVersions(verData.versions);
         if (propData?.proposals) setProposals(propData.proposals);
@@ -143,6 +151,7 @@ function EstimateDetail() {
         if (tsData) setTimeSummary(tsData);
         if (expData?.expenses) setExpenses(expData.expenses);
         if (expSumData) setExpenseSummary(expSumData);
+        if (photosData) setPhotos(photosData);
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -895,6 +904,29 @@ return (
             </button>
           </div>
         </form>
+      </div>
+
+      {/* Photo Attachments */}
+      <div className="mt-8 rounded-xl border border-gray-200 p-6 dark:border-gray-800">
+        <h3 className="text-lg font-semibold mb-4">📸 Job Site Photos</h3>
+        <PhotoUpload
+          estimateId={id}
+          photos={photos}
+          onPhotosChanged={async () => {
+            try {
+              const res = await fetch("/api/call", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ function: "photos.getPhotosByEstimate", args: { data: { estimateId: id } } }),
+                credentials: "include",
+              });
+              const d = await res.json();
+              if (!d.error) setPhotos(d);
+            } catch (e: any) {
+              console.error("Failed to refresh photos:", e);
+            }
+          }}
+        />
       </div>
 
       <div className="mt-8">
