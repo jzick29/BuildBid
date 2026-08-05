@@ -120,8 +120,31 @@ export const updateEstimateStatus = makeAuthFn("estimates.updateEstimateStatus",
     `UPDATE estimates SET status = $1, updated_at = NOW() WHERE id IN (${placeholders.join(",")}) AND user_id = $${ids.length + 2}`,
     [args.data.status, ...ids, userId]
   );
+
+  // Fire push notifications for won/lost status changes
+  const newStatus = args.data.status;
+  if (newStatus === "won" || newStatus === "lost") {
+    for (const estId of ids) {
+      try {
+        const estR = await pool.query("SELECT project_name, customer_name FROM estimates WHERE id = $1", [estId]);
+        const row = estR.rows[0];
+        if (!row) continue;
+        const { sendPushNotification } = await import("./push");
+        if (newStatus === "won") {
+          await sendPushNotification(userId, "Estimate Won!", `You won ${row.project_name} with ${row.customer_name}`, `/estimates/${estId}`);
+        } else {
+          await sendPushNotification(userId, "Estimate Lost", `${row.project_name} with ${row.customer_name} was not selected`, `/estimates/${estId}`);
+        }
+        await pool.query("INSERT INTO automation_logs (id, user_id, type, estimate_id) VALUES ($1,$2,$3,$4)",
+          [crypto.randomUUID(), userId, "estimate_" + newStatus, estId]);
+      } catch (e) {
+        console.error("[estimates] Notification error:", e);
+      }
+    }
+  }
+
   return { success: true };
-});
+  });
 
 // ─── bulkDelete ────────────────────────────────────────────────────
 export const bulkDelete = makeAuthFn("estimates.bulkDelete", async (args: { data: { ids: string[] } }, userId: string, pool: any) => {

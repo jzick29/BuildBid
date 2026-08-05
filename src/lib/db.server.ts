@@ -662,6 +662,7 @@ export async function getDb() {
   // Migrate: add columns if they don't exist
   try { db.run("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'"); } catch {}
   try { db.run("ALTER TABLE users ADD COLUMN frozen INTEGER NOT NULL DEFAULT 0"); } catch {}
+  try { db.run("ALTER TABLE users ADD COLUMN email_notifications INTEGER NOT NULL DEFAULT 1"); } catch {}
   try { db.run("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT DEFAULT NULL"); } catch {}
   try { db.run("ALTER TABLE proposals ADD COLUMN pdf_data TEXT DEFAULT NULL"); } catch {}
   try { db.run("ALTER TABLE proposals ADD COLUMN sent_to_email TEXT DEFAULT NULL"); } catch {}
