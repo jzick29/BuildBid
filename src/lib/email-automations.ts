@@ -1,7 +1,7 @@
 import { makeAuthFn, makeAuthFnFull } from "./iso";
 
 export const getAutomations = makeAuthFn("emailAutomations.getAutomations", async (_args, userId, pool) => {
-  const types = ["proposal_followup", "won_thankyou", "invoice_reminder"];
+  const types = ["proposal_followup", "won_thankyou", "invoice_reminder", "unsent_estimate_reminder"];
   const result: any = {};
   for (const type of types) {
     const r = await pool.query("SELECT * FROM email_automations WHERE user_id = $1 AND type = $2", [userId, type]);
@@ -28,6 +28,18 @@ export const checkAutomations = makeAuthFn("emailAutomations.checkAutomations", 
     if (!logR.rows[0]) {
       await pool.query("INSERT INTO automation_logs (id, user_id, type, estimate_id) VALUES ($1,$2,$3,$4)", [crypto.randomUUID(), userId, "proposal_followup", e.id]);
       triggers.push({ type: "proposal_followup", estimateId: e.id, projectName: e.project_name, customerName: e.customer_name });
+    }
+  }
+  // Unsent draft estimates: drafts older than 2 days
+  const staleDrafts = (await pool.query(
+    "SELECT e.id, e.project_name, e.customer_name FROM estimates e WHERE e.user_id = $1 AND e.status = 'draft' AND e.created_at < NOW() - INTERVAL '2 days'",
+    [userId]
+  )).rows;
+  for (const draft of staleDrafts) {
+    const logR = await pool.query("SELECT id FROM automation_logs WHERE user_id = $1 AND type = 'unsent_estimate_reminder' AND estimate_id = $2", [userId, draft.id]);
+    if (!logR.rows[0]) {
+      await pool.query("INSERT INTO automation_logs (id, user_id, type, estimate_id) VALUES ($1,$2,$3,$4)", [crypto.randomUUID(), userId, "unsent_estimate_reminder", draft.id]);
+      triggers.push({ type: "unsent_estimate_reminder", estimateId: draft.id, projectName: draft.project_name, customerName: draft.customer_name });
     }
   }
   const overdue = (await pool.query("SELECT i.id, e.project_name, e.customer_name, i.estimate_id FROM invoices i JOIN estimates e ON e.id = i.estimate_id WHERE i.user_id = $1 AND i.status = 'sent' AND i.due_date < CURRENT_DATE", [userId])).rows;
