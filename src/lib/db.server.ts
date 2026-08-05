@@ -283,6 +283,23 @@ export async function getDb() {
       message TEXT,
       synced_at TEXT DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS hubspot_tokens (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT NOT NULL DEFAULT '',
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS hubspot_sync (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      estimate_id TEXT,
+      hs_deal_id TEXT,
+      status TEXT NOT NULL DEFAULT 'success',
+      message TEXT,
+      synced_at TEXT DEFAULT (datetime('now'))
+    );
     CREATE TABLE IF NOT EXISTS qbo_tokens (
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       access_token TEXT NOT NULL,
@@ -734,6 +751,8 @@ export async function getDb() {
   try { db.run("ALTER TABLE invoices ADD COLUMN xero_invoice_id TEXT DEFAULT NULL"); } catch {}
   try { db.run("CREATE TABLE IF NOT EXISTS salesforce_tokens (user_id TEXT PRIMARY KEY, access_token TEXT NOT NULL, refresh_token TEXT DEFAULT '', instance_url TEXT NOT NULL, updated_at TEXT DEFAULT (datetime('now')))"); } catch {}
   try { db.run("CREATE TABLE IF NOT EXISTS salesforce_sync (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, estimate_id TEXT, sf_opportunity_id TEXT, status TEXT DEFAULT 'success', message TEXT, synced_at TEXT DEFAULT (datetime('now')))"); } catch {}
+  try { db.run("CREATE TABLE IF NOT EXISTS hubspot_tokens (user_id TEXT PRIMARY KEY, access_token TEXT NOT NULL, refresh_token TEXT DEFAULT '', expires_at TEXT NOT NULL, updated_at TEXT DEFAULT (datetime('now')))"); } catch {}
+  try { db.run("CREATE TABLE IF NOT EXISTS hubspot_sync (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, estimate_id TEXT, hs_deal_id TEXT, status TEXT DEFAULT 'success', message TEXT, synced_at TEXT DEFAULT (datetime('now')))"); } catch {}
   // Seed admin: if ADMIN_EMAIL is set, promote that user to admin.
   // Otherwise, promote the first-created user (lowest created_at).
   try {

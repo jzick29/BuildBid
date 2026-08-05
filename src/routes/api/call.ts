@@ -37,6 +37,7 @@ import "~/lib/reports";
 import "~/lib/quickbooks";
 import "~/lib/xero";
 import "~/lib/salesforce";
+import "~/lib/hubspot";
 import "~/lib/scheduling";
 import "~/lib/signatures";
 import "~/lib/time-entries";
