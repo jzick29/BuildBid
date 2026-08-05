@@ -125,7 +125,7 @@ export function regionMultiplier(location?: string): number {
 // ---------------------------------------------------------------------------
 // Keyword catalog — realistic per-trade line items (mirrors seeded templates)
 // ---------------------------------------------------------------------------
-type MeasureKey = "gallons" | "amps" | "sqft" | "feet" | "tons" | "btu" | "rooms";
+type MeasureKey = "gallons" | "amps" | "sqft" | "feet" | "tons" | "btu" | "rooms" | "count";
 
 type CatalogEntry = {
   trades: string[];
@@ -149,6 +149,8 @@ type CatalogEntry = {
   scaleRooms?: number;
   /** spec measure to surface in the item name (gallons/amps/btu/tons) */
   spec?: MeasureKey;
+  /** per-entry noun for the "count" measure (e.g. "ceiling\\s*fans?") */
+  countNoun?: string;
   /** always included when trade matches and no other item of the same family matched */
   fallback?: boolean;
 };
@@ -160,16 +162,16 @@ const CATALOG: CatalogEntry[] = [
   { trades: ["plumbing"], anchor: ["expansion tank"], name: "Expansion Tank", description: "Thermal expansion tank for water heater", unit: "each", cost: 65, markup: 20, qty: 1, laborPerUnit: 0.5 },
   { trades: ["plumbing"], anchor: ["gas line", "run gas", "new gas"], also: ["csst", "gas piping"], name: "Gas Line Installation", description: "New gas line (CSST) with fittings, shutoff valve and pressure test", unit: "ft", cost: 4.75, markup: 20, qty: 15, laborPerUnit: 0.2, measure: "feet" },
   { trades: ["plumbing"], anchor: ["sewer line", "sewer main"], name: "Sewer Line Replacement", description: "Replace main sewer line with Schedule 40 PVC including excavation", unit: "ft", cost: 3.25, markup: 20, qty: 60, laborPerUnit: 0.35, measure: "feet" },
-  { trades: ["plumbing"], anchor: ["toilet"], name: "Toilet Replacement", description: "Supply & install standard 1.28 gpf toilet with wax ring", unit: "each", cost: 220, markup: 20, qty: 1, laborPerUnit: 2 },
-  { trades: ["plumbing"], anchor: ["faucet", "kitchen sink"], name: "Kitchen Faucet / Sink Install", description: "Supply & install faucet and/or sink with supply lines", unit: "each", cost: 180, markup: 20, qty: 1, laborPerUnit: 2 },
+  { trades: ["plumbing"], anchor: ["toilet"], name: "Toilet Replacement", description: "Supply & install standard 1.28 gpf toilet with wax ring", unit: "each", cost: 220, markup: 20, qty: 1, laborPerUnit: 2, measure: "count", countNoun: "toilets?" },
+  { trades: ["plumbing"], anchor: ["faucet", "kitchen sink"], name: "Kitchen Faucet / Sink Install", description: "Supply & install faucet and/or sink with supply lines", unit: "each", cost: 180, markup: 20, qty: 1, laborPerUnit: 2, measure: "count", countNoun: "faucets?|sinks?" },
   { trades: ["plumbing"], anchor: ["re-pipe", "repiping", "repipes"], name: "Water Re-Pipe", description: "Replace supply piping (PEX) in the described area", unit: "ft", cost: 6, markup: 20, qty: 100, laborPerUnit: 0.12, measure: "feet" },
   // ---- Electrical ----
   { trades: ["electrical"], anchor: ["panel upgrade", "panel replacement", "upgrade panel", "new panel", "service panel", "panel"], name: "Electrical Panel Upgrade", description: "Replace/upgrade main service panel with breakers", unit: "each", cost: 450, markup: 15, qty: 1, laborPerUnit: 8, spec: "amps" },
   { trades: ["electrical"], anchor: ["ev charger", "level 2 charger", "charger install", "ev charging"], name: "EV Charger Installation", description: "Level 2 EV charger with dedicated 50A circuit", unit: "each", cost: 550, markup: 15, qty: 1, laborPerUnit: 4, spec: "amps" },
   { trades: ["electrical"], anchor: ["rewire", "rewiring"], name: "Whole-House Rewire", description: "Replace wiring (12/2 & 14/2 NM-B), outlets and switches", unit: "sqft", cost: 1.5, markup: 15, qty: 2000, laborPerUnit: 0.06, measure: "sqft", scaleSqft: 2000, scaleRooms: 3 },
-  { trades: ["electrical"], anchor: ["outlet", "receptacle", "plug"], also: ["receptacles"], name: "Outlets & Switches", description: "Tamper-resistant outlets and switches", unit: "each", cost: 3.5, markup: 15, qty: 10, laborPerUnit: 0.4, scaleRooms: 5 },
+  { trades: ["electrical"], anchor: ["outlet", "receptacle", "plug"], also: ["receptacles"], name: "Outlets & Switches", description: "Tamper-resistant outlets and switches", unit: "each", cost: 3.5, markup: 15, qty: 10, laborPerUnit: 0.4, scaleRooms: 5, measure: "count", countNoun: "outlets|receptacles|switches" },
   { trades: ["electrical"], anchor: ["led", "lighting", "recessed", "fixtures"], name: "LED Lighting Retrofit", description: "LED panels/retrofit trims with dimmer switches", unit: "each", cost: 14, markup: 15, qty: 12, laborPerUnit: 0.75, scaleRooms: 4 },
-  { trades: ["electrical"], anchor: ["ceiling fan"], name: "Ceiling Fan Installation", description: "Supply & install ceiling fan with remote", unit: "each", cost: 120, markup: 15, qty: 1, laborPerUnit: 2 },
+  { trades: ["electrical"], anchor: ["ceiling fan"], name: "Ceiling Fan Installation", description: "Supply & install ceiling fan with remote", unit: "each", cost: 120, markup: 15, qty: 1, laborPerUnit: 2, measure: "count", countNoun: "ceiling\\s*fans?|fans?" },
   { trades: ["electrical"], anchor: ["circuit", "new circuit", "dedicated circuit"], name: "New Circuit (Branch)", description: "New branch circuit with breaker and wiring", unit: "each", cost: 250, markup: 15, qty: 1, laborPerUnit: 3, measure: "amps" },
   // ---- HVAC ----
   { trades: ["hvac"], anchor: ["furnace"], name: "Furnace Replacement", description: "Replace furnace (AFUE per description) including line set/vent work", unit: "each", cost: 1200, markup: 20, qty: 1, laborPerUnit: 8, spec: "btu" },
@@ -182,7 +184,7 @@ const CATALOG: CatalogEntry[] = [
   { trades: ["roofing"], anchor: ["metal roof", "standing seam"], name: "Standing Seam Metal Roof", description: "16in standing seam panels with underlayment and trim", unit: "sq", cost: 280, markup: 20, qty: 25, laborPerUnit: 3.2, scaleSqft: 2500 },
   { trades: ["roofing"], anchor: ["tpo", "flat roof", "membrane"], name: "Flat / TPO Roof", description: "60-mil TPO membrane over insulation board", unit: "sq", cost: 165, markup: 20, qty: 10, laborPerUnit: 4, scaleSqft: 1000 },
   { trades: ["roofing"], anchor: ["gutter", "downspout"], name: "Gutters & Downspouts", description: "Seamless aluminum gutters with downspouts and hangers", unit: "ft", cost: 4.25, markup: 20, qty: 180, laborPerUnit: 0.07, measure: "feet" },
-  { trades: ["roofing"], anchor: ["tear-off", "remove old roof"], name: "Roof Tear-Off & Haul", description: "Remove old roofing and dispose", unit: "sq", cost: 55, markup: 15, qty: 25, laborPerUnit: 1.2, scaleSqft: 2500 },
+  { trades: ["roofing"], anchor: ["tear-off", "tear off", "remove old roof"], name: "Roof Tear-Off & Haul", description: "Remove old roofing and dispose", unit: "sq", cost: 55, markup: 15, qty: 25, laborPerUnit: 1.2, scaleSqft: 2500 },
   // ---- General ----
   { trades: ["general"], anchor: ["kitchen"], name: "Kitchen Remodel", description: "Stock cabinets, quartz counters, LVP flooring, sink & faucet, demo", unit: "lump", cost: 4500, markup: 15, qty: 1, laborPerUnit: 80 },
   { trades: ["general"], anchor: ["bathroom", "bath remodel", "master bath"], name: "Bathroom Remodel", description: "Demo, fixtures, tile, vanity and plumbing rough-in", unit: "lump", cost: 1800, markup: 15, qty: 1, laborPerUnit: 60 },
@@ -204,18 +206,26 @@ const MEASURE_RE: Record<MeasureKey, RegExp> = {
   sqft: /\b(\d{1,5}(?:[.,]\d+)?)\s*(?:sq\s*ft|sqft|square\s*feet|square\s*foot|sf)\b/i,
   feet: /\b(\d{1,4})\s*(?:ft|feet|foot)\b/i,
   tons: /\b(\d(?:\.\d)?)\s*[- ]?ton\b/i,
-  btu: /\b(\d{2,5}k?)\s*btu\b/i,
+  btu: /\b(\d{1,3}(?:,\d{3})?k?)\s*btu\b/i,
   rooms: /\b(\d{1,2})\s*(?:bedroom|room)s?\b/i,
+  count: /\b(\d{1,3})\s*(?:new\s+)?(?:outlets|receptacles|switches|ceiling\s*fans?|fans?|toilets?|faucets?|registers?|grilles?|lights?|fixtures?)\b/i,
 };
 
 function extractMeasure(text: string, key: MeasureKey): number | null {
   const m = text.match(MEASURE_RE[key]);
   if (!m) return null;
-  return parseFloat(m[1].replace(",", "."));
+  return parseFloat(m[1].replace(",", ""));
 }
 
 function hasAny(text: string, keywords: string[]): boolean {
-  return keywords.some((k) => text.includes(k));
+  return keywords.some((k) => {
+    if (k.length <= 3) {
+      // Short keywords ("ac", "led") match only as whole words to avoid
+      // false positives inside longer words (e.g. "ac" inside "furnace").
+      return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text);
+    }
+    return text.includes(k);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -262,12 +272,15 @@ export function parseEstimateFromDescription(
   const matched: string[] = [];
   const seenFamilies = new Set<string>();
   const claimedSpecs = new Set<string>();
+  const maintenanceMode = /tune[- ]?up|maintenance|service call|check[- ]?up|annual service|inspection/i.test(description);
 
   for (const entry of CATALOG) {
     if (!entry.trades.includes(trade)) continue;
     const anchored = hasAny(text, entry.anchor);
     const secondary = entry.also ? hasAny(text, entry.also) : false;
     if (!anchored && !secondary) continue;
+    // A tune-up/maintenance call is labor, not a replacement — skip big-ticket items
+    if (maintenanceMode && entry.cost >= 300) continue;
 
     // Deduplicate families (e.g., one water-heater item even if both keywords hit)
     const family = entry.name.split(" ").slice(0, 2).join(" ").toLowerCase();
@@ -278,7 +291,13 @@ export function parseEstimateFromDescription(
     let confidence: Confidence = anchored ? "high" : "medium";
     let measured = false;
     if (entry.measure) {
-      const extracted = extractMeasure(text, entry.measure);
+      let extracted: number | null = null;
+      if (entry.measure === "count" && entry.countNoun) {
+        const countMatch = text.match(new RegExp(`\\b(\\d{1,3})\\s*(?:new\\s+)?${entry.countNoun}\\b`, "i"));
+        extracted = countMatch ? parseFloat(countMatch[1]) : null;
+      } else {
+        extracted = extractMeasure(text, entry.measure);
+      }
       if (extracted) {
         quantity = extracted;
         confidence = "high";
