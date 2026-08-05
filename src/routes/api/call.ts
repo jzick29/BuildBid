@@ -27,6 +27,7 @@ import "~/lib/job-costing";
 import "~/lib/materials";
 import "~/lib/notifications";
 import "~/lib/payments";
+import "~/lib/portal";
 import "~/lib/photos";
 import "~/lib/price-lists";
 import "~/lib/profit-margin";

@@ -71,6 +71,8 @@ function EstimateDetail() {
   const [savingExpense, setSavingExpense] = useState(false);
   const [signedByName, setSignedByName] = useState("");
   const [photos, setPhotos] = useState<any[]>([]);
+    const [portalUrl, setPortalUrl] = useState("");
+    const [generatingPortal, setGeneratingPortal] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -523,6 +525,18 @@ return (
             {savingVersion ? "Saving..." : "Save Version"}
           </button>
           <button onClick={() => setShowSaveTemplate(true)} className="rounded-lg border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950">
+            <button onClick={async () => {
+              setGeneratingPortal(true);
+              try {
+                const r = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "portal.generateToken", args: { data: { estimateId: id } } }), credentials: "include" });
+                const d = await r.json();
+                if (d.error) throw new Error(d.error);
+                setPortalUrl(window.location.origin + d.url);
+              } catch(e: any) { alert("Failed: " + e.message); }
+              finally { setGeneratingPortal(false); }
+            }} disabled={generatingPortal} className="rounded-lg border border-purple-300 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-50 disabled:opacity-50 dark:border-purple-700 dark:text-purple-400 dark:hover:bg-purple-950">
+              {generatingPortal ? "Generating..." : "🔗 Share with Customer"}
+            </button>
             Save as Template
           </button>
           <button onClick={async () => {
@@ -566,6 +580,14 @@ return (
         </div>
       </div>
 
+      {portalUrl && (
+        <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50 p-3 flex items-center gap-3 dark:border-purple-800 dark:bg-purple-950">
+          <span className="text-sm font-medium text-purple-700 dark:text-purple-300">Customer Portal:</span>
+          <code className="flex-1 rounded bg-white px-2 py-1 text-xs text-purple-800 break-all dark:bg-gray-800 dark:text-purple-300">{portalUrl}</code>
+          <button onClick={() => { navigator.clipboard.writeText(portalUrl); alert("Copied!"); }} className="shrink-0 rounded bg-purple-600 px-3 py-1 text-xs font-semibold text-white hover:bg-purple-700">Copy</button>
+          <button onClick={() => window.open(portalUrl, "_blank")} className="shrink-0 rounded bg-white px-3 py-1 text-xs font-semibold text-purple-600 border border-purple-300 hover:bg-purple-100 dark:bg-gray-800 dark:text-purple-400 dark:border-purple-700">Open</button>
+        </div>
+      )
       {showProposalForm && (
         <div className="mt-6 rounded-xl border border-gray-200 p-6 dark:border-gray-800">
           <h3 className="font-semibold text-lg mb-4">Generate Proposal</h3>
