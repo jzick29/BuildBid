@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { Pool } from "pg";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import handler from "./dist/server/server.js";
+import { parseEstimateFromDescription, estimateFromDescription } from "./src/lib/ai-prompts";
 
 const getPool = () => {
   if (!(globalThis as any).__buildbid_pool) {
@@ -341,6 +342,44 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
       } catch (e: any) {
         console.error("[stripe-webhook] Error:", e.message);
         res.statusCode = 400; res.end(JSON.stringify({ error: "Webhook processing failed" }));
+      }
+      return;
+    }
+    // /api/ai/estimate — natural language → structured line items (auth required)
+    if (req.method === "POST" && url === "/api/ai/estimate") {
+      try {
+        const aiBody = await readBody(req);
+        const aiCookies = parseCookies(req);
+        const aiToken = aiCookies["buildbid_session"];
+        if (!aiToken) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+        const aiPool = getPool();
+        const aiAuth = await aiPool.query("SELECT u.id, u.frozen FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [aiToken]);
+        if (!aiAuth.rows[0]) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+        if (aiAuth.rows[0].frozen === 1) { res.statusCode = 403; res.end(JSON.stringify({ error: "Account frozen. Contact support." })); return; }
+        const aiUserId = aiAuth.rows[0].id;
+        const aiDescription = String(aiBody?.description || "").trim();
+        const aiTrade = String(aiBody?.trade || "general").toLowerCase();
+        if (!aiDescription) { res.statusCode = 400; res.end(JSON.stringify({ error: "Describe the job" })); return; }
+        if (!["electrical", "plumbing", "hvac", "roofing", "general"].includes(aiTrade)) { res.statusCode = 400; res.end(JSON.stringify({ error: "Invalid trade" })); return; }
+        // Pull the user's supplier catalog for realistic pricing when available
+        let aiCatalog: any[] = [];
+        try {
+          const catR = await aiPool.query("SELECT name, unit, unit_cost, trade FROM materials WHERE user_id=$1 AND unit_cost > 0 ORDER BY name", [aiUserId]);
+          aiCatalog = catR.rows;
+        } catch { /* catalog optional */ }
+        const aiPhotos = Array.isArray(aiBody?.photos) ? aiBody.photos.map((p: any) => String(p?.name || p)).filter(Boolean) : [];
+        const aiResult = parseEstimateFromDescription(aiDescription, aiTrade, {
+          location: aiBody?.location,
+          squareFootage: aiBody?.squareFootage ? Number(aiBody.squareFootage) : undefined,
+          rooms: aiBody?.rooms ? Number(aiBody.rooms) : undefined,
+          catalog: aiCatalog,
+          photoCount: aiPhotos.length,
+        });
+        res.statusCode = 200; res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ ...aiResult, prompt: estimateFromDescription(aiDescription, aiTrade), photos: aiPhotos }));
+      } catch (e: any) {
+        console.error("[ai/estimate] Error:", e?.message || e);
+        res.statusCode = 500; res.end(JSON.stringify({ error: "AI estimate failed" }));
       }
       return;
     }
@@ -696,6 +735,32 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             if (mR.rows[0].owner_id !== userId) { res.statusCode = 403; res.end(JSON.stringify({ error: "Not your team" })); return; }
             await pool.query("DELETE FROM team_members WHERE id = $1", [d2.memberId]);
             result = { success: true };
+            break;
+          }
+          case "ai.createEstimate": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const aiD = args?.data || {};
+            if (!aiD.projectName?.trim() || !aiD.customerName?.trim()) { res.statusCode = 400; res.end(JSON.stringify({ error: "Project and customer name required" })); return; }
+            const aiItems = Array.isArray(aiD.lineItems) ? aiD.lineItems : [];
+            if (aiItems.length === 0) { res.statusCode = 400; res.end(JSON.stringify({ error: "No line items to add" })); return; }
+            const aiTrade = aiD.trade || "general";
+            const aiEid = crypto.randomUUID();
+            await pool.query("INSERT INTO estimates (id, user_id, project_name, customer_name, trade, status, notes) VALUES ($1,$2,$3,$4,$5,'draft',$6)",
+              [aiEid, userId, String(aiD.projectName).trim(), String(aiD.customerName).trim(), aiTrade, aiD.notes ? String(aiD.notes).slice(0, 2000) : "Generated with AI-assisted estimating"]);
+            let aiSort = 0;
+            for (const it of aiItems) {
+              const qty = Number(it.quantity) || 1;
+              const cost = Number(it.unitCost) || Number(it.unit_cost) || 0;
+              const mark = Number(it.markup);
+              await pool.query("INSERT INTO line_items (id, estimate_id, description, quantity, unit, unit_cost, markup_percent, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+                [crypto.randomUUID(), aiEid, String(it.name || it.description || "").slice(0, 500), qty, it.unit || "each", cost, Number.isFinite(mark) ? mark : 0, aiSort++]);
+            }
+            const aiLaborHours = Number(aiD.laborHours) || 0;
+            if (aiLaborHours > 0) {
+              await pool.query("INSERT INTO line_items (id, estimate_id, description, quantity, unit, unit_cost, markup_percent, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+                [crypto.randomUUID(), aiEid, `Labor - ${aiTrade} (AI estimate)`, aiLaborHours, "hour", Number(aiD.laborRate) || 85, 0, aiSort++]);
+            }
+            result = { id: aiEid };
             break;
           }
           // === admin ===

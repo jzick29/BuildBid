@@ -37,6 +37,7 @@ import { Route as ChangeOrdersRouteImport } from './routes/change-orders'
 import { Route as BlogRouteImport } from './routes/blog'
 import { Route as AutomationRouteImport } from './routes/automation'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as AiEstimateRouteImport } from './routes/ai-estimate'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PortalIndexRouteImport } from './routes/portal/index'
@@ -198,6 +199,11 @@ const AnalyticsRoute = AnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AiEstimateRoute = AiEstimateRouteImport.update({
+  id: '/ai-estimate',
+  path: '/ai-estimate',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -298,6 +304,7 @@ const PortalChangeOrderIdRoute = PortalChangeOrderIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/ai-estimate': typeof AiEstimateRoute
   '/analytics': typeof AnalyticsRoute
   '/automation': typeof AutomationRoute
   '/blog': typeof BlogRoute
@@ -347,6 +354,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/ai-estimate': typeof AiEstimateRoute
   '/analytics': typeof AnalyticsRoute
   '/automation': typeof AutomationRoute
   '/blog': typeof BlogRoute
@@ -396,6 +404,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/ai-estimate': typeof AiEstimateRoute
   '/analytics': typeof AnalyticsRoute
   '/automation': typeof AutomationRoute
   '/blog': typeof BlogRoute
@@ -447,6 +456,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/ai-estimate'
     | '/analytics'
     | '/automation'
     | '/blog'
@@ -496,6 +506,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin'
+    | '/ai-estimate'
     | '/analytics'
     | '/automation'
     | '/blog'
@@ -544,6 +555,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin'
+    | '/ai-estimate'
     | '/analytics'
     | '/automation'
     | '/blog'
@@ -594,6 +606,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  AiEstimateRoute: typeof AiEstimateRoute
   AnalyticsRoute: typeof AnalyticsRoute
   AutomationRoute: typeof AutomationRoute
   BlogRoute: typeof BlogRoute
@@ -830,6 +843,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AnalyticsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ai-estimate': {
+      id: '/ai-estimate'
+      path: '/ai-estimate'
+      fullPath: '/ai-estimate'
+      preLoaderRoute: typeof AiEstimateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin': {
       id: '/admin'
       path: '/admin'
@@ -1037,6 +1057,7 @@ const SubscribeRouteWithChildren = SubscribeRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  AiEstimateRoute: AiEstimateRoute,
   AnalyticsRoute: AnalyticsRoute,
   AutomationRoute: AutomationRoute,
   BlogRoute: BlogRoute,

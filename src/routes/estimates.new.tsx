@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
+import { AiEstimator } from "../components/AiEstimator";
 
 export const Route = createFileRoute("/estimates/new")({
   loader: async () => ({}),
@@ -28,7 +29,7 @@ function NewEstimate() {
   const [trade, setTrade] = useState("");
   const [formError, setFormError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [mode, setMode] = useState<"blank" | "template">("blank");
+  const [mode, setMode] = useState<"blank" | "template" | "ai">("blank");
   const [materials, setMaterials] = useState<any[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState("");
 
@@ -114,13 +115,16 @@ function NewEstimate() {
       <div className="mt-6 flex gap-2 rounded-lg border border-gray-200 p-1 dark:border-gray-800">
         <button onClick={() => setMode("blank")} className={`flex-1 rounded-md px-4 py-2 text-sm font-medium ${mode === "blank" ? "bg-indigo-600 text-white" : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"}`}>Start from Scratch</button>
         <button onClick={() => setMode("template")} className={`flex-1 rounded-md px-4 py-2 text-sm font-medium ${mode === "template" ? "bg-indigo-600 text-white" : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"}`}>Start from Template</button>
+        <button onClick={() => setMode("ai")} className={`flex-1 rounded-md px-4 py-2 text-sm font-medium ${mode === "ai" ? "bg-violet-600 text-white" : "text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"}`}>✨ AI Estimate</button>
       </div>
 
       {formError && <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-950 dark:text-red-400">{formError}</div>}
 
       <div className="mt-8">
         <div>
-          {mode === "blank" ? (
+          {mode === "ai" ? (
+            <AiEstimator />
+          ) : mode === "blank" ? (
             <form onSubmit={handleSubmit} className="space-y-6">
               <div><label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Project Name</label><input type="text" value={projectName} onChange={e => setProjectName(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800" required /></div>
               <div><label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Customer Name</label><input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-800" required /></div>
