@@ -65,8 +65,7 @@ function Home() {
           Now with AI-assisted estimating
         </div>
         <h1 className="max-w-3xl text-5xl font-bold tracking-tight sm:text-6xl">
-          Win more profitable work with{" "}
-          <span className="text-indigo-600 dark:text-indigo-400">less overhead</span>
+          Win more profitable work with less overhead
         </h1>
         <p className="mt-6 max-w-xl text-lg text-gray-600 dark:text-gray-400">
           BuildBid replaces spreadsheets and pen-and-paper with line-item assemblies,
@@ -82,6 +81,24 @@ function Home() {
           </a>
         </div>
         <p className="mt-4 text-sm text-gray-400">No credit card required. 14-day full access.</p>
+      </section>
+
+      {/* Social proof bar */}
+      <section className="border-t border-gray-200 bg-indigo-600 px-6 py-14 dark:bg-indigo-950">
+        <p className="text-center text-sm font-semibold uppercase tracking-wider text-indigo-200 mb-8">Trusted by contractors across 5 trades</p>
+        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-8 text-center sm:gap-16">
+          {[
+            { value: "22+", label: "Pre-built Templates" },
+            { value: "224", label: "Supplier Catalog Items" },
+            { value: "5", label: "Trades Supported" },
+            { value: "14-Day", label: "Free Trial" },
+          ].map((s) => (
+            <div key={s.label}>
+              <p className="text-4xl font-bold text-white">{s.value}</p>
+              <p className="mt-1 text-sm text-indigo-200">{s.label}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* Integrations bar */}
@@ -369,9 +386,7 @@ function Home() {
             <div>
               <h4 className="mb-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Company</h4>
               <ul className="space-y-2 text-sm text-gray-500 dark:text-gray-400">
-                <li><span className="cursor-default">About</span></li>
-                <li><span className="cursor-default">Contact</span></li>
-                <li><span className="cursor-default">Careers</span></li>
+                <li><Link to="/blog" className="hover:text-gray-900 dark:hover:text-gray-100">Blog</Link></li>
               </ul>
             </div>
             <div>
