@@ -61,9 +61,10 @@ async function handleLogin(body: any) {
   const { email, password } = body || {};
   if (!email || !password) return new Response(JSON.stringify({ error: "Missing fields" }), { status: 400, headers: { "Content-Type": "application/json" } });
   const pool = getPool();
-  const r = await pool.query("SELECT id, email, name, password_hash FROM users WHERE email=$1", [email]);
+  const r = await pool.query("SELECT id, email, name, password_hash, frozen FROM users WHERE email=$1", [email]);
   if (!r.rows[0]) return new Response(JSON.stringify({ error: "Invalid credentials" }), { status: 401, headers: { "Content-Type": "application/json" } });
   if (!bcrypt.compareSync(password, r.rows[0].password_hash)) return new Response(JSON.stringify({ error: "Invalid credentials" }), { status: 401, headers: { "Content-Type": "application/json" } });
+  if (r.rows[0].frozen === 1) return new Response(JSON.stringify({ error: "Account frozen. Contact support." }), { status: 403, headers: { "Content-Type": "application/json" } });
   const token = crypto.randomUUID();
   await pool.query("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1,$2,$3)", [token, r.rows[0].id, new Date(Date.now() + 7 * 86400000).toISOString()]);
   const resp = new Response(JSON.stringify({ success: true, user: r.rows[0] }), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -74,8 +75,9 @@ async function handleMe(req: IncomingMessage) {
   const token = parseCookies(req)["buildbid_session"];
   if (!token) return new Response(JSON.stringify({ user: null }), { status: 200, headers: { "Content-Type": "application/json" } });
   const pool = getPool();
-  const r = await pool.query("SELECT u.id, u.email, u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [token]);
+  const r = await pool.query("SELECT u.id, u.email, u.name, u.frozen FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [token]);
   if (!r.rows[0]) return new Response(JSON.stringify({ user: null }), { status: 200, headers: { "Content-Type": "application/json" } });
+  if (r.rows[0].frozen === 1) return new Response(JSON.stringify({ user: null, error: "Account frozen. Contact support." }), { status: 403, headers: { "Content-Type": "application/json" } });
   return new Response(JSON.stringify({ user: r.rows[0] }), { status: 200, headers: { "Content-Type": "application/json" } });
 }
 async function handleLogout(req: IncomingMessage) {
@@ -255,6 +257,8 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         `CREATE TABLE IF NOT EXISTS leads (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, trade TEXT DEFAULT '', source TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS time_entries (id TEXT PRIMARY KEY, estimate_id TEXT NOT NULL REFERENCES estimates(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id), description TEXT DEFAULT '', hours REAL NOT NULL DEFAULT 0, crew_member TEXT DEFAULT '', date TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS expenses (id TEXT PRIMARY KEY, estimate_id TEXT NOT NULL REFERENCES estimates(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id), description TEXT DEFAULT '', amount DECIMAL(12,2) NOT NULL DEFAULT 0, category TEXT NOT NULL DEFAULT 'materials', vendor TEXT DEFAULT '', expense_date TEXT NOT NULL DEFAULT '', receipt_url TEXT DEFAULT NULL, notes TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        // === payments (admin) ===
+        `CREATE TABLE IF NOT EXISTS payments (id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id) ON DELETE SET NULL, stripe_event_id TEXT DEFAULT '', amount INTEGER NOT NULL DEFAULT 0, currency TEXT NOT NULL DEFAULT 'usd', status TEXT NOT NULL DEFAULT 'succeeded', tier TEXT DEFAULT '', customer_email TEXT DEFAULT '', stripe_customer_id TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         // === customer portal ===
         `CREATE TABLE IF NOT EXISTS client_users (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, email TEXT NOT NULL, password_hash TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', company_name TEXT DEFAULT '', active INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (user_id, email))`,
         `CREATE TABLE IF NOT EXISTS client_sessions (id TEXT PRIMARY KEY, client_user_id TEXT NOT NULL REFERENCES client_users(id) ON DELETE CASCADE, expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
@@ -297,6 +301,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         const expected = crypto.createHmac("sha256", webhookSecret).update(signedPayload).digest("hex");
         if (expected !== parts["v1"]) { res.statusCode = 401; res.end(JSON.stringify({ error: "Invalid signature" })); return; }
         const event = JSON.parse(rawBody);
+        const pool = getPool();
         if (event.type === "checkout.session.completed") {
           const session = event.data.object;
           const customerEmail = session.customer_details?.email || session.customer_email;
@@ -306,12 +311,31 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
           const amountToTier: Record<number, string> = { 4900: "starter", 9900: "pro", 19900: "shop" };
           let tier = metaPlan || amountToTier[session.amount_total] || "";
           if (!tier) { res.statusCode = 200; res.end(JSON.stringify({ received: true, note: "Unknown plan amount" })); return; }
-          const pool = getPool();
-          if (metaUserId) {
-            await pool.query("UPDATE users SET subscription_tier=$1, stripe_customer_id=$2 WHERE id=$3", [tier, session.customer || null, metaUserId]);
+          let paidUserId = metaUserId || "";
+          if (!paidUserId && customerEmail) {
+            const uq = await pool.query("SELECT id FROM users WHERE email=$1", [customerEmail]);
+            if (uq.rows[0]) paidUserId = uq.rows[0].id;
+          }
+          if (paidUserId) {
+            await pool.query("UPDATE users SET subscription_tier=$1, stripe_customer_id=$2 WHERE id=$3", [tier, session.customer || null, paidUserId]);
           } else if (customerEmail) {
             await pool.query("UPDATE users SET subscription_tier=$1, stripe_customer_id=$2 WHERE email=$3", [tier, session.customer || null, customerEmail]);
           }
+          try {
+            await pool.query("INSERT INTO payments (id, user_id, stripe_event_id, amount, currency, status, tier, customer_email, stripe_customer_id, created_at) VALUES ($1,$2,$3,$4,$5,'succeeded',$6,$7,$8,NOW())",
+              [crypto.randomUUID(), paidUserId || null, event.id || "", session.amount_total || 0, session.currency || "usd", tier, customerEmail || "", session.customer || null]);
+          } catch (pe: any) { console.error("[stripe-webhook] payments insert failed:", pe.message); }
+        }
+        if (event.type === "invoice.payment_failed") {
+          const invoice = event.data.object;
+          const cusId = invoice.customer || "";
+          const amount = invoice.amount_due || invoice.amount_remaining || 0;
+          let invUserId = "";
+          if (cusId) { const uq = await pool.query("SELECT id FROM users WHERE stripe_customer_id=$1", [cusId]); if (uq.rows[0]) invUserId = uq.rows[0].id; }
+          try {
+            await pool.query("INSERT INTO payments (id, user_id, stripe_event_id, amount, currency, status, tier, customer_email, stripe_customer_id, created_at) VALUES ($1,$2,$3,$4,$5,'failed',$6,$7,$8,NOW())",
+              [crypto.randomUUID(), invUserId || null, event.id || "", amount, invoice.currency || "usd", "", invoice.customer_email || "", cusId]);
+          } catch (pe: any) { console.error("[stripe-webhook] payments insert failed:", pe.message); }
         }
         res.statusCode = 200; res.end(JSON.stringify({ received: true }));
       } catch (e: any) {
@@ -329,10 +353,12 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
       const token = cookies["buildbid_session"];
       const pool = getPool();
       let userId = "";
-      if (token) { const r = await pool.query("SELECT u.id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [token]); if (r.rows[0]) userId = r.rows[0].id; }
+      let userFrozen = 0;
+      if (token) { const r = await pool.query("SELECT u.id, u.frozen FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [token]); if (r.rows[0]) { userId = r.rows[0].id; userFrozen = r.rows[0].frozen || 0; } }
       let clientUser: any = null;
       try { clientUser = await getClientUser(req); } catch (e: any) { console.error("[portal] client session check failed:", e?.message || e); }
       let result: any;
+      if (userFrozen === 1) { res.statusCode = 403; res.end(JSON.stringify({ error: "Account frozen. Contact support." })); return; }
       try {
         switch (fnName) {
           case "templates.listTemplates": case "templates.getTemplates": { const td = args?.data || {}; const trade = td.trade; const tab = td.tab || "all"; // all, my, shared
@@ -756,6 +782,43 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             if (abe.rows[0]?.role !== "admin") { res.statusCode = 403; res.end(JSON.stringify({ error: "Admin required" })); return; }
             const recipients = (await pool.query("SELECT email FROM users WHERE frozen = 0 AND subscription_tier != 'free'")).rows.map((r:any) => r.email);
             result = { recipients, ready: true };
+            break;
+          }
+          case "admin.listPayments": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const apl = await pool.query("SELECT role FROM users WHERE id = $1", [userId]);
+            if (apl.rows[0]?.role !== "admin") { res.statusCode = 403; res.end(JSON.stringify({ error: "Admin required" })); return; }
+            const dp = args?.data || {};
+            const statusFilter = dp.status && dp.status !== "all" ? String(dp.status) : null;
+            const payRows = statusFilter
+              ? (await pool.query("SELECT p.*, COALESCE(u.email, p.customer_email) AS user_email, u.name AS user_name FROM payments p LEFT JOIN users u ON u.id = p.user_id WHERE p.status = $1 ORDER BY p.created_at DESC LIMIT 500", [statusFilter])).rows
+              : (await pool.query("SELECT p.*, COALESCE(u.email, p.customer_email) AS user_email, u.name AS user_name FROM payments p LEFT JOIN users u ON u.id = p.user_id ORDER BY p.created_at DESC LIMIT 500")).rows;
+            result = { payments: payRows, total: payRows.length };
+            break;
+          }
+          case "admin.getPaymentStats": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const aps = await pool.query("SELECT role FROM users WHERE id = $1", [userId]);
+            if (aps.rows[0]?.role !== "admin") { res.statusCode = 403; res.end(JSON.stringify({ error: "Admin required" })); return; }
+            const [revQ, mrrQ, subQ, trialQ, totalQ, frozenQ, failedQ] = await Promise.all([
+              pool.query("SELECT COALESCE(SUM(amount),0)::bigint as s FROM payments WHERE status = 'succeeded'"),
+              pool.query("SELECT COALESCE(SUM(amount),0)::bigint as s FROM payments WHERE status = 'succeeded' AND created_at >= date_trunc('month', NOW())"),
+              pool.query("SELECT COUNT(*)::int as c FROM users WHERE subscription_tier IN ('starter','pro','shop') AND frozen = 0"),
+              pool.query("SELECT COUNT(*)::int as c FROM users WHERE subscription_tier = 'trial' AND frozen = 0"),
+              pool.query("SELECT COUNT(*)::int as c FROM users"),
+              pool.query("SELECT COUNT(*)::int as c FROM users WHERE frozen = 1"),
+              pool.query("SELECT COUNT(*)::int as c FROM payments WHERE status = 'failed'"),
+            ]);
+            const totalRevenue = Number(revQ.rows[0].s) / 100;
+            const mrr = Number(mrrQ.rows[0].s) / 100;
+            const activeSubscribers = subQ.rows[0].c;
+            const activeTrials = trialQ.rows[0].c;
+            const totalUsers = totalQ.rows[0].c;
+            const frozenUsers = frozenQ.rows[0].c;
+            const failedPayments = failedQ.rows[0].c;
+            const churned = (await pool.query("SELECT COUNT(*)::int as c FROM users WHERE stripe_customer_id IS NOT NULL AND stripe_customer_id != '' AND subscription_tier NOT IN ('starter','pro','shop') AND frozen = 0")).rows[0].c;
+            const churnRate = (activeSubscribers + churned) > 0 ? Math.round((churned / (activeSubscribers + churned)) * 1000) / 10 : 0;
+            result = { totalRevenue, mrr, activeSubscribers, activeTrials, totalUsers, frozenUsers, failedPayments, churned, churnRate, currency: "usd" };
             break;
           }
           // === push ===

@@ -12,9 +12,12 @@ function AdminDashboard() {
   const [platformStats, setPlatformStats] = useState<any>(null);
   const [auditLog, setAuditLog] = useState<any[]>([]);
   const [health, setHealth] = useState<any>(null);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [paymentStats, setPaymentStats] = useState<any>(null);
+  const [paymentFilter, setPaymentFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState("");
-  const [tab, setTab] = useState<"users"|"audit"|"health">("users");
+  const [tab, setTab] = useState<"users"|"payments"|"overview"|"audit"|"health">("users");
 
   const loadData = async () => {
     const meRes = await fetch("/api/me", { credentials: "include" });
@@ -40,6 +43,14 @@ function AdminDashboard() {
   const loadHealth = async () => {
     const r = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "admin.healthCheck", args: {} }), credentials: "include" }).then(r => r.json());
     setHealth(r);
+  };
+  const loadPayments = async (status: string = paymentFilter) => {
+    const r = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "admin.listPayments", args: { data: { status } } }), credentials: "include" }).then(r => r.json());
+    setPayments(Array.isArray(r.payments) ? r.payments : []);
+  };
+  const loadPaymentStats = async () => {
+    const r = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "admin.getPaymentStats", args: {} }), credentials: "include" }).then(r => r.json());
+    setPaymentStats(r);
   };
 
   useEffect(() => { loadData(); }, []);
@@ -105,8 +116,8 @@ function AdminDashboard() {
 
         {/* Tabs */}
         <div className="mt-6 flex gap-2 border-b border-gray-200 dark:border-gray-800 pb-px">
-          {[{ key: "users", label: "Users" }, { key: "audit", label: "Audit Log" }, { key: "health", label: "Health" }].map(t => (
-            <button key={t.key} onClick={() => { setTab(t.key as any); if (t.key === "audit") loadAuditLog(); if (t.key === "health") { loadHealth(); loadPlatformStats(); } }}
+          {[{ key: "users", label: "Users" }, { key: "payments", label: "Payments" }, { key: "overview", label: "Overview" }, { key: "audit", label: "Audit Log" }, { key: "health", label: "Health" }].map(t => (
+            <button key={t.key} onClick={() => { setTab(t.key as any); if (t.key === "payments") loadPayments(); if (t.key === "overview") loadPaymentStats(); if (t.key === "audit") loadAuditLog(); if (t.key === "health") { loadHealth(); loadPlatformStats(); } }}
               className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${tab === t.key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
               {t.label}
             </button>
@@ -161,6 +172,66 @@ function AdminDashboard() {
           </>
         )}
 
+        {/* Payments Tab */}
+        {tab === "payments" && (
+          <>
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-gray-500 dark:text-gray-400">{payments.length} payment{payments.length === 1 ? "" : "s"} recorded</p>
+              <select value={paymentFilter} onChange={e => { setPaymentFilter(e.target.value); loadPayments(e.target.value); }}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900">
+                <option value="all">All statuses</option>
+                <option value="succeeded">Succeeded</option>
+                <option value="failed">Failed</option>
+                <option value="refunded">Refunded</option>
+              </select>
+            </div>
+            <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-950">
+                  <tr>
+                    <th className="px-4 py-3 font-medium text-gray-600">Date</th>
+                    <th className="px-4 py-3 font-medium text-gray-600">Customer</th>
+                    <th className="px-4 py-3 font-medium text-gray-600">Amount</th>
+                    <th className="px-4 py-3 font-medium text-gray-600">Tier</th>
+                    <th className="px-4 py-3 font-medium text-gray-600">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                  {payments.map((p: any) => (
+                    <tr key={p.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-2.5 whitespace-nowrap text-gray-500">{new Date(p.created_at).toLocaleString()}</td>
+                      <td className="px-4 py-2.5">{p.user_email || "—"}</td>
+                      <td className="px-4 py-2.5 font-medium">${(Number(p.amount || 0) / 100).toFixed(2)}</td>
+                      <td className="px-4 py-2.5 capitalize text-gray-600">{p.tier || "—"}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${p.status === "succeeded" ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400" : p.status === "failed" ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400" : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"}`}>{p.status}</span>
+                      </td>
+                    </tr>
+                  ))}
+                  {payments.length === 0 && <tr><td colSpan={5} className="px-4 py-12 text-center text-sm text-gray-500">No payments yet. Successful checkouts and failed invoices will appear here.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+        {/* Overview Tab */}
+        {tab === "overview" && (
+          <>
+            {paymentStats && (
+              <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"><p className="text-2xl font-bold">${Number(paymentStats.mrr || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p><p className="mt-1 text-xs text-gray-500">MRR (this month)</p></div>
+                <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"><p className="text-2xl font-bold">${Number(paymentStats.totalRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p><p className="mt-1 text-xs text-gray-500">Total Revenue</p></div>
+                <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"><p className="text-2xl font-bold">{paymentStats.activeSubscribers}</p><p className="mt-1 text-xs text-gray-500">Active Subscribers</p></div>
+                <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"><p className="text-2xl font-bold">{paymentStats.activeTrials}</p><p className="mt-1 text-xs text-gray-500">Active Trials</p></div>
+                <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"><p className="text-2xl font-bold">{paymentStats.totalUsers}</p><p className="mt-1 text-xs text-gray-500">Total Users</p></div>
+                <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"><p className="text-2xl font-bold">{paymentStats.frozenUsers}</p><p className="mt-1 text-xs text-gray-500">Frozen Accounts</p></div>
+                <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"><p className="text-2xl font-bold">{paymentStats.failedPayments}</p><p className="mt-1 text-xs text-gray-500">Failed Payments</p></div>
+                <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900"><p className="text-2xl font-bold">{paymentStats.churnRate || 0}%</p><p className="mt-1 text-xs text-gray-500">Churn Rate</p></div>
+              </div>
+            )}
+            {!paymentStats && <p className="mt-6 text-sm text-gray-500">Loading overview…</p>}
+          </>
+        )}
         {/* Audit Log Tab */}
         {tab === "audit" && (
           <>
