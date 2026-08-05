@@ -11,7 +11,7 @@ export async function GET(req: Request): Promise<Response> {
 
     const pool = getPool();
     const cookieHeader = req.headers.get("cookie") || "";
-    const sessionMatch = cookieHeader.match(/session=([^;]+)/);
+    const sessionMatch = cookieHeader.match(/buildbid_session=([^;]+)/);
     if (!sessionMatch) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
     const sessionRes = await pool.query("SELECT user_id FROM sessions WHERE token = $1", [sessionMatch[1]]);
     if (sessionRes.rows.length === 0) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
