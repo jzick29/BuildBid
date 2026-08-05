@@ -658,6 +658,19 @@ export async function getDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_co_estimate ON change_orders(estimate_id);
     CREATE INDEX IF NOT EXISTS idx_coi_co ON change_order_items(change_order_id);
+    CREATE TABLE IF NOT EXISTS import_history (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      supplier TEXT DEFAULT '',
+      file_type TEXT DEFAULT '',
+      rows_total INTEGER NOT NULL DEFAULT 0,
+      rows_created INTEGER NOT NULL DEFAULT 0,
+      rows_updated INTEGER NOT NULL DEFAULT 0,
+      rows_skipped INTEGER NOT NULL DEFAULT 0,
+      column_map TEXT DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_ih_user ON import_history(user_id);
   `);
   // Migrate: add columns if they don't exist
   try { db.run("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'"); } catch {}
@@ -670,6 +683,8 @@ export async function getDb() {
   try { db.run("ALTER TABLE line_items ADD COLUMN material_id TEXT DEFAULT NULL"); } catch {}
   try { db.run("ALTER TABLE invoices ADD COLUMN payment_link_id TEXT DEFAULT NULL"); } catch {}
   try { db.run("ALTER TABLE estimates ADD COLUMN contract_id TEXT DEFAULT NULL"); } catch {}
+  try { db.run("ALTER TABLE materials ADD COLUMN sku TEXT DEFAULT ''"); } catch {}
+  try { db.run("ALTER TABLE materials ADD COLUMN updated_at TEXT DEFAULT NULL"); } catch {}
   // Seed admin: if ADMIN_EMAIL is set, promote that user to admin.
   // Otherwise, promote the first-created user (lowest created_at).
   try {

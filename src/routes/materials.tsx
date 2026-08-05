@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
+import { BulkImport } from "~/components/BulkImport";
 
 export const Route = createFileRoute("/materials")({ component: MaterialsPage });
 
@@ -22,6 +23,7 @@ function MaterialsPage() {
   const [bulkSupplier, setBulkSupplier] = useState("");
   const [bulkCost, setBulkCost] = useState("");
   const [showBulk, setShowBulk] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   // Modal (edit/create)
   const [showModal, setShowModal] = useState(false);
@@ -220,6 +222,9 @@ function MaterialsPage() {
             <button onClick={() => { setSuppForm({ name: "", contact_name: "", email: "", phone: "", website: "", notes: "", editingId: "" }); setShowSuppModal(true); }} className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
               + Supplier
             </button>
+            <button onClick={() => setShowImport(!showImport)} className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+              📄 Import
+            </button>
             <button onClick={openCreate} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
               + Material
             </button>
@@ -246,6 +251,20 @@ function MaterialsPage() {
               className="text-xs text-indigo-600 hover:text-indigo-500">Clear</button>
           )}
         </div>
+
+        {/* Bulk Import */}
+        {showImport && (
+          <div className="mt-6 rounded-xl border border-gray-200 p-6 dark:border-gray-800">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">📦 Bulk Import from Supplier</h3>
+              <button onClick={() => setShowImport(false)} className="text-sm text-gray-500 hover:text-gray-700">✕ Close</button>
+            </div>
+            <BulkImport onImported={(r) => {
+              refresh();
+              setShowImport(false);
+            }} />
+          </div>
+        )}
 
         {/* Bulk bar */}
         {selected.size > 0 && (

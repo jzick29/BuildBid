@@ -7,6 +7,7 @@ import { getHandler } from "~/lib/call-registry";
 import "~/lib/analytics";
 import "~/lib/auth";
 import "~/lib/admin";
+import "~/lib/bulk-import";
 import "~/lib/change-orders";
 import "~/lib/change-order-workflow";
 import "~/lib/contracts";
