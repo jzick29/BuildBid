@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie, deleteCookie } from "@tanstack/react-start/server";
 import { redirect } from "@tanstack/react-router";
+import { makeAuthFn } from "./iso";
 
 const SESSION_COOKIE = "buildbid_session";
 
@@ -90,3 +91,40 @@ export const deleteUser = createServerFn({ method: "POST" })
     db.run("DELETE FROM users WHERE id = ?", [data.userId]);
     return { success: true };
   });
+
+// Payment history — list all payments for admin dashboard
+export const listPayments = makeAuthFn("admin.listPayments", async (args: { data: { status?: string } }, userId, _pool) => {
+  const { data } = args;
+  const db = await (await import("./db.server")).getDb();
+  let sql = `SELECT p.*, u.email as user_email, i.invoice_number 
+    FROM payments p 
+    LEFT JOIN users u ON u.id = p.user_id 
+    LEFT JOIN invoices i ON i.id = p.invoice_id`;
+  const params: any[] = [];
+  if (data?.status) {
+    sql += " WHERE p.status = ?";
+    params.push(data.status);
+  }
+  sql += " ORDER BY p.created_at DESC LIMIT 100";
+  const payments = db.query(sql).all(...params);
+  return { payments };
+});
+
+// Payment stats for admin dashboard
+export const getPaymentStats = makeAuthFn("admin.getPaymentStats", async (_args: any, _userId, _pool) => {
+  const db = await (await import("./db.server")).getDb();
+  const total = db.query("SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'completed'").get() as any;
+  const thisMonth = db.query(
+    "SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM payments WHERE status = 'completed' AND created_at >= date('now', 'start of month')"
+  ).get() as any;
+  const byTier = db.query(
+    "SELECT u.subscription_tier, COUNT(*) as count, COALESCE(SUM(p.amount), 0) as total FROM payments p JOIN users u ON u.id = p.user_id WHERE p.status = 'completed' GROUP BY u.subscription_tier"
+  ).all() as any[];
+  return {
+    totalRevenue: total?.total || 0,
+    totalCount: total?.count || 0,
+    thisMonthRevenue: thisMonth?.total || 0,
+    thisMonthCount: thisMonth?.count || 0,
+    byTier,
+  };
+});
