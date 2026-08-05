@@ -122,19 +122,19 @@ function Home() {
           <p className="mt-4 text-center text-gray-600 dark:text-gray-400">Purpose-built for trade contractors who are done with spreadsheets.</p>
           <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {[
-              { icon: "grid", title: "Line-Item Assemblies", desc: "Pre-built cost databases by trade with 22+ templates. Go from hours to minutes on every bid with real supplier pricing." },
-              { icon: "doc", title: "Professional Proposals", desc: "Turn estimates into branded, customer-ready PDF proposals with digital signature capture in one click." },
-              { icon: "sparkle", title: "AI-Assisted Estimating", desc: "Describe a job in plain English and get a populated estimate with realistic line items from a 224-item supplier catalog." },
-              { icon: "cube", title: "Plan Room Takeoff", desc: "Upload blueprints, calibrate scale, and measure lengths, areas, and counts right on screen with a canvas overlay." },
-              { icon: "chart", title: "Profit Margin Calculator", desc: "Live margin tracking with green/yellow/red warnings. Never submit a money-losing bid again." },
-              { icon: "users", title: "Job Tracking & Costing", desc: "Follow estimates through to won/lost with actual-vs-estimated cost tracking. Version history with side-by-side diff." },
+              { img: "/images/estimates-list.png", title: "Line-Item Assemblies", desc: "Pre-built cost databases by trade with 22+ templates. Go from hours to minutes on every bid with real supplier pricing." },
+              { img: "/images/templates-proposals.png", title: "Professional Proposals", desc: "Turn estimates into branded, customer-ready PDF proposals with digital signature capture in one click." },
+              { img: "/images/ai-estimate.png", title: "AI-Assisted Estimating", desc: "Describe a job in plain English and get a populated estimate with realistic line items from a 224-item supplier catalog." },
+              { img: "/images/takeoff.png", title: "Plan Room Takeoff", desc: "Upload blueprints, calibrate scale, and measure lengths, areas, and counts right on screen with a canvas overlay." },
+              { img: "/images/reports-margins.png", title: "Profit Margin Calculator", desc: "Live margin tracking with green/yellow/red warnings. Never submit a money-losing bid again." },
+              { img: "/images/job-tracking.png", title: "Job Tracking & Costing", desc: "Follow estimates through to won/lost with actual-vs-estimated cost tracking. Version history with side-by-side diff." },
             ].map((f, i) => (
-              <div key={i} className="rounded-xl border border-gray-200 bg-white p-6 transition hover:border-indigo-300 hover:shadow-md dark:border-gray-800 dark:bg-gray-900">
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-950">
-                  <FeatureIcon name={f.icon} />
+              <div key={i} className="rounded-xl border border-gray-200 bg-white p-0 overflow-hidden transition hover:border-indigo-300 hover:shadow-md dark:border-gray-800 dark:bg-gray-900">
+                <img src={f.img} alt={f.title} className="w-full h-40 object-cover object-top border-b border-gray-200 dark:border-gray-800" />
+                <div className="p-5">
+                  <h3 className="text-lg font-semibold">{f.title}</h3>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{f.desc}</p>
                 </div>
-                <h3 className="text-lg font-semibold">{f.title}</h3>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{f.desc}</p>
               </div>
             ))}
           </div>
@@ -415,18 +415,5 @@ function Home() {
   );
 }
 
-function FeatureIcon({ name }: { name: string }) {
-  const paths: Record<string, string> = {
-    grid: "M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z",
-    doc: "M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z",
-    sparkle: "M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z",
-    cube: "M6.429 9.75L2.25 12l4.179 2.25m0-4.5l5.571 3 5.571-3m-11.142 0L2.25 7.5 12 2.25l9.75 5.25-4.179 2.25m0 0L21.75 12l-4.179 2.25m0 0l4.179 2.25L12 21.75 2.25 16.5l4.179-2.25m11.142 0l-5.571 3-5.571-3",
-    chart: "M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z",
-    users: "M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z",
-  };
-  return (
-    <svg className="h-6 w-6 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d={paths[name] || paths.grid} />
-    </svg>
-  );
-}
+
+
