@@ -535,6 +535,25 @@ return (
           }} className="rounded-lg border border-green-300 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-950">
             Export to QuickBooks
           </button>
+          <button onClick={async () => {
+            try {
+              const r = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "calendar.createEvent", args: { data: { estimateId: id } } }), credentials: "include" });
+              const d = await r.json();
+              if (d.error) throw new Error(d.error);
+              if (d.method === "google") {
+                if (confirm("Event created in Google Calendar. Open it?")) window.open(d.htmlLink, "_blank");
+              } else if (d.method === "ics") {
+                const blob = new Blob([d.ics], { type: "text/calendar" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = `${(estimate?.project_name || "estimate").replace(/[^a-z0-9]+/gi, "-")}.ics`;
+                a.click(); URL.revokeObjectURL(url);
+                alert("Calendar invite (.ics) downloaded. Connect Google Calendar in Integrations to create events directly.");
+              }
+            } catch(e: any) { alert("Calendar error: " + e.message); }
+          }} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+            📅 Add to Calendar
+          </button>
           <a href={`/api/export/estimate?id=${id}&format=csv`} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
             Export CSV
           </a>
