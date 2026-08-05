@@ -65,6 +65,7 @@ function Dashboard() {
       .then(r => r.json())
       .then(d => {
         if (!d.user) { window.location.href = "/login"; return; }
+        if (!d.user.onboarding_completed) { window.location.href = "/onboarding"; return; }
         setUser(d.user);
         return fetch("/api/call", {
           method: "POST",

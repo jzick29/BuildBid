@@ -22,6 +22,7 @@ import { Route as PriceListsRouteImport } from './routes/price-lists'
 import { Route as PortalAccessRouteImport } from './routes/portal-access'
 import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as PaymentSuccessRouteImport } from './routes/payment-success'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as MaterialsRouteImport } from './routes/materials'
 import { Route as LogoutRouteImport } from './routes/logout'
 import { Route as LoginRouteImport } from './routes/login'
@@ -122,6 +123,11 @@ const PipelineRoute = PipelineRouteImport.update({
 const PaymentSuccessRoute = PaymentSuccessRouteImport.update({
   id: '/payment-success',
   path: '/payment-success',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MaterialsRoute = MaterialsRouteImport.update({
@@ -327,6 +333,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/logout': typeof LogoutRoute
   '/materials': typeof MaterialsRoute
+  '/onboarding': typeof OnboardingRoute
   '/payment-success': typeof PaymentSuccessRoute
   '/pipeline': typeof PipelineRoute
   '/portal-access': typeof PortalAccessRoute
@@ -377,6 +384,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/logout': typeof LogoutRoute
   '/materials': typeof MaterialsRoute
+  '/onboarding': typeof OnboardingRoute
   '/payment-success': typeof PaymentSuccessRoute
   '/pipeline': typeof PipelineRoute
   '/portal-access': typeof PortalAccessRoute
@@ -429,6 +437,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/logout': typeof LogoutRoute
   '/materials': typeof MaterialsRoute
+  '/onboarding': typeof OnboardingRoute
   '/payment-success': typeof PaymentSuccessRoute
   '/pipeline': typeof PipelineRoute
   '/portal-access': typeof PortalAccessRoute
@@ -482,6 +491,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/logout'
     | '/materials'
+    | '/onboarding'
     | '/payment-success'
     | '/pipeline'
     | '/portal-access'
@@ -532,6 +542,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/logout'
     | '/materials'
+    | '/onboarding'
     | '/payment-success'
     | '/pipeline'
     | '/portal-access'
@@ -583,6 +594,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/logout'
     | '/materials'
+    | '/onboarding'
     | '/payment-success'
     | '/pipeline'
     | '/portal-access'
@@ -635,6 +647,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   LogoutRoute: typeof LogoutRoute
   MaterialsRoute: typeof MaterialsRoute
+  OnboardingRoute: typeof OnboardingRoute
   PaymentSuccessRoute: typeof PaymentSuccessRoute
   PipelineRoute: typeof PipelineRoute
   PortalAccessRoute: typeof PortalAccessRoute
@@ -749,6 +762,13 @@ declare module '@tanstack/react-router' {
       path: '/payment-success'
       fullPath: '/payment-success'
       preLoaderRoute: typeof PaymentSuccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/materials': {
@@ -1094,6 +1114,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   LogoutRoute: LogoutRoute,
   MaterialsRoute: MaterialsRoute,
+  OnboardingRoute: OnboardingRoute,
   PaymentSuccessRoute: PaymentSuccessRoute,
   PipelineRoute: PipelineRoute,
   PortalAccessRoute: PortalAccessRoute,

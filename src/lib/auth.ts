@@ -238,7 +238,7 @@ export const getCurrentUser = createServerFn({ method: "GET" }).handler(async ()
   if (!token) return { user: null };
   const db = await getDb();
   const row = await db.queryOne(
-    "SELECT u.id, u.email, u.name, u.subscription_tier, u.trial_ends_at, u.stripe_customer_id, u.role, u.frozen FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > CURRENT_TIMESTAMP",
+    "SELECT u.id, u.email, u.name, u.subscription_tier, u.trial_ends_at, u.stripe_customer_id, u.role, u.frozen, COALESCE(u.onboarding_completed, 0) AS onboarding_completed, COALESCE(u.trade, '') AS trade, COALESCE(u.phone, '') AS phone FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > CURRENT_TIMESTAMP",
     [token]
   );
   if (!row) {
