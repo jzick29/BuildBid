@@ -587,7 +587,7 @@ return (
           <button onClick={() => { navigator.clipboard.writeText(portalUrl); alert("Copied!"); }} className="shrink-0 rounded bg-purple-600 px-3 py-1 text-xs font-semibold text-white hover:bg-purple-700">Copy</button>
           <button onClick={() => window.open(portalUrl, "_blank")} className="shrink-0 rounded bg-white px-3 py-1 text-xs font-semibold text-purple-600 border border-purple-300 hover:bg-purple-100 dark:bg-gray-800 dark:text-purple-400 dark:border-purple-700">Open</button>
         </div>
-      )
+      )}
       {showProposalForm && (
         <div className="mt-6 rounded-xl border border-gray-200 p-6 dark:border-gray-800">
           <h3 className="font-semibold text-lg mb-4">Generate Proposal</h3>

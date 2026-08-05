@@ -47,6 +47,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as PortalIndexRouteImport } from './routes/portal/index'
 import { Route as FreeEstimatingTemplatePdfIndexRouteImport } from './routes/free-estimating-template-pdf/index'
 import { Route as EstimatesIndexRouteImport } from './routes/estimates.index'
+import { Route as ViewTokenRouteImport } from './routes/view.$token'
 import { Route as TradeSlugRouteImport } from './routes/trade.$slug'
 import { Route as SubscribeSuccessRouteImport } from './routes/subscribe.success'
 import { Route as SubscribeCancelRouteImport } from './routes/subscribe.cancel'
@@ -256,6 +257,11 @@ const EstimatesIndexRoute = EstimatesIndexRouteImport.update({
   path: '/',
   getParentRoute: () => EstimatesRoute,
 } as any)
+const ViewTokenRoute = ViewTokenRouteImport.update({
+  id: '/view/$token',
+  path: '/view/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TradeSlugRoute = TradeSlugRouteImport.update({
   id: '/trade/$slug',
   path: '/trade/$slug',
@@ -387,6 +393,7 @@ export interface FileRoutesByFullPath {
   '/subscribe/cancel': typeof SubscribeCancelRoute
   '/subscribe/success': typeof SubscribeSuccessRoute
   '/trade/$slug': typeof TradeSlugRoute
+  '/view/$token': typeof ViewTokenRoute
   '/estimates/': typeof EstimatesIndexRoute
   '/free-estimating-template-pdf/': typeof FreeEstimatingTemplatePdfIndexRoute
   '/portal/': typeof PortalIndexRoute
@@ -442,6 +449,7 @@ export interface FileRoutesByTo {
   '/subscribe/cancel': typeof SubscribeCancelRoute
   '/subscribe/success': typeof SubscribeSuccessRoute
   '/trade/$slug': typeof TradeSlugRoute
+  '/view/$token': typeof ViewTokenRoute
   '/estimates': typeof EstimatesIndexRoute
   '/free-estimating-template-pdf': typeof FreeEstimatingTemplatePdfIndexRoute
   '/portal': typeof PortalIndexRoute
@@ -499,6 +507,7 @@ export interface FileRoutesById {
   '/subscribe/cancel': typeof SubscribeCancelRoute
   '/subscribe/success': typeof SubscribeSuccessRoute
   '/trade/$slug': typeof TradeSlugRoute
+  '/view/$token': typeof ViewTokenRoute
   '/estimates/': typeof EstimatesIndexRoute
   '/free-estimating-template-pdf/': typeof FreeEstimatingTemplatePdfIndexRoute
   '/portal/': typeof PortalIndexRoute
@@ -557,6 +566,7 @@ export interface FileRouteTypes {
     | '/subscribe/cancel'
     | '/subscribe/success'
     | '/trade/$slug'
+    | '/view/$token'
     | '/estimates/'
     | '/free-estimating-template-pdf/'
     | '/portal/'
@@ -612,6 +622,7 @@ export interface FileRouteTypes {
     | '/subscribe/cancel'
     | '/subscribe/success'
     | '/trade/$slug'
+    | '/view/$token'
     | '/estimates'
     | '/free-estimating-template-pdf'
     | '/portal'
@@ -668,6 +679,7 @@ export interface FileRouteTypes {
     | '/subscribe/cancel'
     | '/subscribe/success'
     | '/trade/$slug'
+    | '/view/$token'
     | '/estimates/'
     | '/free-estimating-template-pdf/'
     | '/portal/'
@@ -717,6 +729,7 @@ export interface RootRouteChildren {
   PortalLoginRoute: typeof PortalLoginRoute
   SignEstimateIdRoute: typeof SignEstimateIdRoute
   TradeSlugRoute: typeof TradeSlugRoute
+  ViewTokenRoute: typeof ViewTokenRoute
   FreeEstimatingTemplatePdfIndexRoute: typeof FreeEstimatingTemplatePdfIndexRoute
   PortalIndexRoute: typeof PortalIndexRoute
   PortalChangeOrderIdRoute: typeof PortalChangeOrderIdRoute
@@ -991,6 +1004,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EstimatesIndexRouteImport
       parentRoute: typeof EstimatesRoute
     }
+    '/view/$token': {
+      id: '/view/$token'
+      path: '/view/$token'
+      fullPath: '/view/$token'
+      preLoaderRoute: typeof ViewTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/trade/$slug': {
       id: '/trade/$slug'
       path: '/trade/$slug'
@@ -1228,6 +1248,7 @@ const rootRouteChildren: RootRouteChildren = {
   PortalLoginRoute: PortalLoginRoute,
   SignEstimateIdRoute: SignEstimateIdRoute,
   TradeSlugRoute: TradeSlugRoute,
+  ViewTokenRoute: ViewTokenRoute,
   FreeEstimatingTemplatePdfIndexRoute: FreeEstimatingTemplatePdfIndexRoute,
   PortalIndexRoute: PortalIndexRoute,
   PortalChangeOrderIdRoute: PortalChangeOrderIdRoute,
