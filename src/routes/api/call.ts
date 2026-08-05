@@ -16,6 +16,7 @@ import "~/lib/blog";
 import "~/lib/email-automations";
 import "~/lib/email-proposals";
 import "~/lib/estimates";
+import "~/lib/subcontractors";
 import "~/lib/feedback";
 import "~/lib/integrations";
 import "~/lib/invoices";

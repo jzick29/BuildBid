@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as SubscribeRouteImport } from './routes/subscribe'
+import { Route as SubcontractorsRouteImport } from './routes/subcontractors'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ShareRouteImport } from './routes/share'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -75,6 +76,11 @@ const TeamRoute = TeamRouteImport.update({
 const SubscribeRoute = SubscribeRouteImport.update({
   id: '/subscribe',
   path: '/subscribe',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SubcontractorsRoute = SubcontractorsRouteImport.update({
+  id: '/subcontractors',
+  path: '/subcontractors',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignupRoute = SignupRouteImport.update({
@@ -358,6 +364,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/share': typeof ShareRoute
   '/signup': typeof SignupRoute
+  '/subcontractors': typeof SubcontractorsRoute
   '/subscribe': typeof SubscribeRouteWithChildren
   '/team': typeof TeamRoute
   '/templates': typeof TemplatesRouteWithChildren
@@ -411,6 +418,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/share': typeof ShareRoute
   '/signup': typeof SignupRoute
+  '/subcontractors': typeof SubcontractorsRoute
   '/subscribe': typeof SubscribeRouteWithChildren
   '/team': typeof TeamRoute
   '/templates': typeof TemplatesRouteWithChildren
@@ -466,6 +474,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/share': typeof ShareRoute
   '/signup': typeof SignupRoute
+  '/subcontractors': typeof SubcontractorsRoute
   '/subscribe': typeof SubscribeRouteWithChildren
   '/team': typeof TeamRoute
   '/templates': typeof TemplatesRouteWithChildren
@@ -522,6 +531,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/share'
     | '/signup'
+    | '/subcontractors'
     | '/subscribe'
     | '/team'
     | '/templates'
@@ -575,6 +585,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/share'
     | '/signup'
+    | '/subcontractors'
     | '/subscribe'
     | '/team'
     | '/templates'
@@ -629,6 +640,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/share'
     | '/signup'
+    | '/subcontractors'
     | '/subscribe'
     | '/team'
     | '/templates'
@@ -684,6 +696,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   ShareRoute: typeof ShareRoute
   SignupRoute: typeof SignupRoute
+  SubcontractorsRoute: typeof SubcontractorsRoute
   SubscribeRoute: typeof SubscribeRouteWithChildren
   TeamRoute: typeof TeamRoute
   TemplatesRoute: typeof TemplatesRouteWithChildren
@@ -718,6 +731,13 @@ declare module '@tanstack/react-router' {
       path: '/subscribe'
       fullPath: '/subscribe'
       preLoaderRoute: typeof SubscribeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/subcontractors': {
+      id: '/subcontractors'
+      path: '/subcontractors'
+      fullPath: '/subcontractors'
+      preLoaderRoute: typeof SubcontractorsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -1179,6 +1199,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   ShareRoute: ShareRoute,
   SignupRoute: SignupRoute,
+  SubcontractorsRoute: SubcontractorsRoute,
   SubscribeRoute: SubscribeRouteWithChildren,
   TeamRoute: TeamRoute,
   TemplatesRoute: TemplatesRouteWithChildren,

@@ -93,6 +93,7 @@ const navSections: NavSection[] = [
     items: [
       { href: "/schedule", label: "Schedule", icon: "schedule" },
       { href: "/pipeline", label: "Pipeline", icon: "pipeline" },
+      { href: "/subcontractors", label: "Subcontractors", icon: "team" },
       { href: "/materials", label: "Materials", icon: "materials" },
       { href: "/price-lists", label: "Price Lists", icon: "priceLists" },
       { href: "/customers", label: "Customers", icon: "customers" },
@@ -266,6 +267,7 @@ function MobileNav() {
               {[
                 { href: "/schedule", label: "Schedule", icon: "schedule" },
                 { href: "/pipeline", label: "Pipeline", icon: "pipeline" },
+                { href: "/subcontractors", label: "Subcontractors", icon: "team" },
                 { href: "/materials", label: "Materials", icon: "materials" },
                 { href: "/price-lists", label: "Price Lists", icon: "priceLists" },
                 { href: "/customers", label: "Customers", icon: "customers" },

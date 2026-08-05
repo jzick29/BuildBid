@@ -10,6 +10,7 @@ import { parseEstimateFromDescription, estimateFromDescription } from "./src/lib
 import { sendSms, findCustomerPhone, getSmsSettings, saveSmsSettings, getSmsLogs, getAdminSmsLogs } from "./src/lib/sms";
 import { getReportFilters, getProfitability, getWinLoss, getEstimatorPerformance, getRevenueTrends, getCostBreakdown } from "./src/lib/reports";
 import { publishListing, unpublishListing, getMyListings, searchListings, getListingDetail, checkoutListing, installListing, rateListing } from "./src/lib/marketplace";
+import { listRfqs, getRfq, createRfq, updateRfqStatus, addQuote, updateQuoteStatus, deleteQuote, compareQuotes } from "./src/lib/subcontractors";
 
 const getPool = () => {
   if (!(globalThis as any).__buildbid_pool) {
@@ -227,6 +228,8 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         `CREATE TABLE IF NOT EXISTS template_listings (id TEXT PRIMARY KEY, template_id TEXT NOT NULL REFERENCES templates(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, description TEXT DEFAULT '', trade TEXT NOT NULL DEFAULT 'general', tags TEXT DEFAULT '', price_cents INTEGER NOT NULL DEFAULT 0, is_published INTEGER NOT NULL DEFAULT 1, downloads INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS template_ratings (id TEXT PRIMARY KEY, listing_id TEXT NOT NULL REFERENCES template_listings(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, rating INTEGER NOT NULL DEFAULT 5, review TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS template_installs (id TEXT PRIMARY KEY, listing_id TEXT NOT NULL REFERENCES template_listings(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'installed', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS rfqs (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, estimate_id TEXT REFERENCES estimates(id) ON DELETE SET NULL, scope TEXT DEFAULT '', due_date TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'open', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS rfq_quotes (id TEXT PRIMARY KEY, rfq_id TEXT NOT NULL REFERENCES rfqs(id) ON DELETE CASCADE, subcontractor TEXT NOT NULL, contact TEXT DEFAULT '', email TEXT DEFAULT '', phone TEXT DEFAULT '', amount REAL NOT NULL DEFAULT 0, timeline TEXT DEFAULT '', notes TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', received_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS customer_id TEXT`,
         `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS auto_renew BOOLEAN NOT NULL DEFAULT false`,
         `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS renewal_notice_days INTEGER NOT NULL DEFAULT 30`,
@@ -1834,6 +1837,46 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
               },
               rows, estChanges,
             };
+            break;
+          }
+          case "rfqs.list": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await listRfqs(args, userId, pool);
+            break;
+          }
+          case "rfqs.get": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getRfq(args, userId, pool);
+            break;
+          }
+          case "rfqs.create": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await createRfq(args, userId, pool);
+            break;
+          }
+          case "rfqs.updateStatus": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await updateRfqStatus(args, userId, pool);
+            break;
+          }
+          case "rfqs.addQuote": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await addQuote(args, userId, pool);
+            break;
+          }
+          case "rfqs.updateQuoteStatus": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await updateQuoteStatus(args, userId, pool);
+            break;
+          }
+          case "rfqs.deleteQuote": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await deleteQuote(args, userId, pool);
+            break;
+          }
+          case "rfqs.compare": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await compareQuotes(args, userId, pool);
             break;
           }
           case "markups.listPresets": {
