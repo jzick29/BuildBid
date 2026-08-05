@@ -14,6 +14,10 @@ function SettingsPage() {
   const [smsLogs, setSmsLogs] = useState<any[]>([]);
   const [smsTestPhone, setSmsTestPhone] = useState("");
   const [smsStatus, setSmsStatus] = useState("");
+  const [branding, setBranding] = useState<any>(null);
+  const [brandForm, setBrandForm] = useState({ companyName: "", logoUrl: "", primaryColor: "#4f46e5", accentColor: "#0ea5e9", customDomain: "", whiteLabel: false });
+  const [brandSaving, setBrandSaving] = useState(false);
+  const [brandMsg, setBrandMsg] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -35,6 +39,11 @@ function SettingsPage() {
         setSub(subData);
         setPushSubs(pushData);
         setBuilderPlatforms(platData);
+        const b = await fetchApi("branding.get").catch(() => null);
+        if (b?.branding) {
+          setBranding(b.branding);
+          setBrandForm({ companyName: b.branding.company_name || "", logoUrl: b.branding.logo_url || "", primaryColor: b.branding.primary_color || "#4f46e5", accentColor: b.branding.accent_color || "#0ea5e9", customDomain: b.branding.custom_domain || "", whiteLabel: !!b.branding.white_label });
+        }
         if (smsSettings) setSms(smsSettings);
         if (smsLogData?.logs) setSmsLogs(smsLogData.logs);
       } catch (e: any) { setError(e.message); }
@@ -142,6 +151,65 @@ function SettingsPage() {
             <div className="mt-4 space-y-2">{builderPlatforms.map((p: any) => <div key={p.id} className="flex items-center justify-between rounded-lg bg-gray-50 p-3 dark:bg-gray-950"><span className="text-sm font-medium capitalize">{p.platform}</span><button onClick={() => fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "integrations.disconnectPlatform", args: { data: { platform: p.platform } } }), credentials: "include" }).then(() => setBuilderPlatforms(builderPlatforms.filter(x => x.platform !== p.platform)))} className="text-sm text-red-600 hover:underline">Disconnect</button></div>)}</div>
           ) : <p className="mt-4 text-sm text-gray-400">No integrations connected</p>}
           <button onClick={async () => { const res = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "integrations.getConnectionUrl", args: { data: { platform: "buildertrend" } } }), credentials: "include" }); const data = await res.json(); if (data.url) window.open(data.url, "_blank"); }} className="mt-4 rounded-lg border border-indigo-300 px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950">+ Connect Builder Platform</button>
+        </section>
+        <section className="mt-6 rounded-xl border border-gray-200 p-6 dark:border-gray-800">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">White-Label Branding <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">Shop Tier</span></h2>
+            {brandMsg && <span className="text-xs text-green-600 dark:text-green-400">{brandMsg}</span>}
+          </div>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Replace BuildBid branding with your own company name, logo, and colors across the app. Enable White Label to remove BuildBid from the interface entirely.</p>
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Company name</label>
+              <input value={brandForm.companyName} onChange={e => setBrandForm({ ...brandForm, companyName: e.target.value })} placeholder="e.g. Acme Electrical" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-950" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Logo URL</label>
+              <input value={brandForm.logoUrl} onChange={e => setBrandForm({ ...brandForm, logoUrl: e.target.value })} placeholder="https://…/logo.png" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-950" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Primary color</label>
+              <div className="mt-1 flex items-center gap-2">
+                <input type="color" value={brandForm.primaryColor} onChange={e => setBrandForm({ ...brandForm, primaryColor: e.target.value })} className="h-9 w-12 cursor-pointer rounded border border-gray-300 dark:border-gray-700" />
+                <input value={brandForm.primaryColor} onChange={e => setBrandForm({ ...brandForm, primaryColor: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-950" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Accent color</label>
+              <div className="mt-1 flex items-center gap-2">
+                <input type="color" value={brandForm.accentColor} onChange={e => setBrandForm({ ...brandForm, accentColor: e.target.value })} className="h-9 w-12 cursor-pointer rounded border border-gray-300 dark:border-gray-700" />
+                <input value={brandForm.accentColor} onChange={e => setBrandForm({ ...brandForm, accentColor: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-950" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Custom domain</label>
+              <input value={brandForm.customDomain} onChange={e => setBrandForm({ ...brandForm, customDomain: e.target.value })} placeholder="app.acme.com" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-950" />
+              <p className="mt-1 text-[11px] text-gray-400">Point a CNAME to buildbid.pro — full domain setup is handled by your account manager.</p>
+            </div>
+            <label className="flex items-center gap-2 pt-6 text-sm text-gray-700 dark:text-gray-300">
+              <input type="checkbox" checked={brandForm.whiteLabel} onChange={e => setBrandForm({ ...brandForm, whiteLabel: e.target.checked })} className="h-4 w-4 rounded border-gray-300" />
+              White label — hide all BuildBid branding
+            </label>
+          </div>
+          <div className="mt-4 flex items-center gap-4">
+            <div className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-800">
+              <span className="text-xs text-gray-400">Preview:</span>
+              {brandForm.logoUrl ? <img src={brandForm.logoUrl} alt="logo" className="h-6 w-6 rounded object-contain" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} /> : null}
+              <span className="text-sm font-bold" style={{ color: brandForm.primaryColor }}>{brandForm.companyName || (brandForm.whiteLabel ? "Your Company" : "BuildBid")}</span>
+            </div>
+            <button onClick={async () => {
+              setBrandSaving(true); setBrandMsg("");
+              try {
+                const res = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "branding.save", args: { data: brandForm } }), credentials: "include" });
+                const d = await res.json();
+                if (d.error) throw new Error(d.error);
+                setBrandMsg("Branding saved — refresh the page to see it applied.");
+                const b = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "branding.get", args: {} }), credentials: "include" }).then(r => r.json());
+                if (b?.branding) setBranding(b.branding);
+              } catch (e: any) { setBrandMsg(e.message); }
+              finally { setBrandSaving(false); }
+            }} disabled={brandSaving} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{brandSaving ? "Saving…" : "Save Branding"}</button>
+          </div>
         </section>
       </main>
     </div>

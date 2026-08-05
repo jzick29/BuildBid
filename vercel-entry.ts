@@ -11,6 +11,7 @@ import { sendSms, findCustomerPhone, getSmsSettings, saveSmsSettings, getSmsLogs
 import { getReportFilters, getProfitability, getWinLoss, getEstimatorPerformance, getRevenueTrends, getCostBreakdown } from "./src/lib/reports";
 import { publishListing, unpublishListing, getMyListings, searchListings, getListingDetail, checkoutListing, installListing, rateListing } from "./src/lib/marketplace";
 import { listRfqs, getRfq, createRfq, updateRfqStatus, addQuote, updateQuoteStatus, deleteQuote, compareQuotes } from "./src/lib/subcontractors";
+import { getBranding, saveBranding } from "./src/lib/branding";
 
 const getPool = () => {
   if (!(globalThis as any).__buildbid_pool) {
@@ -230,6 +231,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         `CREATE TABLE IF NOT EXISTS template_installs (id TEXT PRIMARY KEY, listing_id TEXT NOT NULL REFERENCES template_listings(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'installed', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS rfqs (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, estimate_id TEXT REFERENCES estimates(id) ON DELETE SET NULL, scope TEXT DEFAULT '', due_date TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'open', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS rfq_quotes (id TEXT PRIMARY KEY, rfq_id TEXT NOT NULL REFERENCES rfqs(id) ON DELETE CASCADE, subcontractor TEXT NOT NULL, contact TEXT DEFAULT '', email TEXT DEFAULT '', phone TEXT DEFAULT '', amount REAL NOT NULL DEFAULT 0, timeline TEXT DEFAULT '', notes TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', received_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS branding (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, company_name TEXT DEFAULT '', logo_url TEXT DEFAULT '', primary_color TEXT NOT NULL DEFAULT '#4f46e5', accent_color TEXT NOT NULL DEFAULT '#0ea5e9', custom_domain TEXT DEFAULT '', white_label INTEGER NOT NULL DEFAULT 0, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS customer_id TEXT`,
         `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS auto_renew BOOLEAN NOT NULL DEFAULT false`,
         `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS renewal_notice_days INTEGER NOT NULL DEFAULT 30`,
@@ -1877,6 +1879,16 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
           case "rfqs.compare": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             result = await compareQuotes(args, userId, pool);
+            break;
+          }
+          case "branding.get": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getBranding(args, userId, pool);
+            break;
+          }
+          case "branding.save": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await saveBranding(args, userId, pool);
             break;
           }
           case "markups.listPresets": {
