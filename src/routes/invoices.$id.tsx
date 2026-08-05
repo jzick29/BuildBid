@@ -32,6 +32,8 @@ function InvoiceDetailPage() {
   const [pdfBase64, setPdfBase64] = useState("");
   const [sendingReminder, setSendingReminder] = useState(false);
   const [reminders, setReminders] = useState<any[]>([]);
+  const [generatingPaymentLink, setGeneratingPaymentLink] = useState(false);
+  const [sendingPaymentLink, setSendingPaymentLink] = useState(false);
 
   const loadInvoice = useCallback(async () => {
     try {
@@ -146,6 +148,41 @@ function InvoiceDetailPage() {
     } catch (e: any) { alert("Failed: " + e.message); }
     finally { setSendingReminder(false); }
   };
+  const handlePayNow = async () => {
+    setGeneratingPaymentLink(true);
+    try {
+      const result = await callApi("payments.createPaymentLink", {
+        invoiceId: id,
+        amount: invoice.total,
+        description: "Invoice " + (invoice.invoice_number || id.slice(0, 8)),
+      });
+      if (result.url) {
+        window.open(result.url, "_blank");
+        alert("Payment link opened in new tab. This invoice will be marked paid automatically.");
+      }
+    } catch (e: any) { alert("Failed to create payment link: " + e.message); }
+    finally { setGeneratingPaymentLink(false); }
+  };
+  const handleSendPaymentLink = async () => {
+    setSendingPaymentLink(true);
+    try {
+      const result = await callApi("payments.createPaymentLink", {
+        invoiceId: id,
+        amount: invoice.total,
+        description: "Invoice " + (invoice.invoice_number || id.slice(0, 8)),
+      });
+      if (result.url) {
+        await callApi("notifications.sendEstimateSentEmail", {
+          estimateId: invoice.estimate_id || "",
+          customerEmail: invoice.customer_email || "",
+          message: "You can pay your invoice online: " + result.url,
+        });
+        await callApi("invoices.updateInvoice", { id, payment_link_id: result.id });
+        alert("Payment link sent! Customer can pay at: " + result.url);
+      }
+    } catch (e: any) { alert("Failed: " + e.message); }
+    finally { setSendingPaymentLink(false); }
+  };
 
   const handleStatusChange = async (newStatus: string) => {
     try {
@@ -206,9 +243,17 @@ function InvoiceDetailPage() {
             </button>
           )}
           {status !== "paid" && (
-            <button onClick={handleSendReminder} disabled={sendingReminder} className="rounded-lg border border-amber-300 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950 disabled:opacity-50">
-              {sendingReminder ? "Sending..." : "Send Reminder"}
-            </button>
+            <div className="flex gap-2">
+              <button onClick={handlePayNow} disabled={generatingPaymentLink} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+                {generatingPaymentLink ? "Generating..." : "Pay Now"}
+              </button>
+              <button onClick={handleSendPaymentLink} disabled={sendingPaymentLink} className="rounded-lg border border-emerald-300 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950 disabled:opacity-50">
+                {sendingPaymentLink ? "Sending..." : "Send Payment Link"}
+              </button>
+              <button onClick={handleSendReminder} disabled={sendingReminder} className="rounded-lg border border-amber-300 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950 disabled:opacity-50">
+                {sendingReminder ? "Sending..." : "Send Reminder"}
+              </button>
+            </div>
           )}
           <Link to="/estimates/$id" params={{ id: invoice.estimate_id }} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
             View Estimate

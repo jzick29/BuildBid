@@ -1,4 +1,5 @@
 import { makeAuthFn, makePublicFn } from "./iso";
+import { getCatalogForTrade, searchCatalog, getAvailableTrades, getAvailableSuppliers } from "./supplier-catalog";
 
 export const listMaterials = makeAuthFn("materials.listMaterials", async (args: { data?: { trade?: string } }, userId, pool) => {
   const trade = args.data?.trade;
@@ -14,6 +15,29 @@ export const importMaterials = makeAuthFn("materials.importMaterials", async (ar
     count++;
   }
   return { imported: count };
+});
+
+// ─── Supplier Catalog API ──────────────────────────────────────────────────
+
+export const searchSupplierCatalog = makeAuthFn("materials.searchSupplierCatalog", async (args: { data: { query: string } }) => {
+  return searchCatalog(args.data.query);
+});
+
+export const getCatalogTrades = makeAuthFn("materials.getCatalogTrades", async () => {
+  return { trades: getAvailableTrades(), suppliers: getAvailableSuppliers() };
+});
+
+export const importFromCatalog = makeAuthFn("materials.importFromCatalog", async (args: { data: { trade: string } }, userId, pool) => {
+  const items = getCatalogForTrade(args.data.trade);
+  let count = 0;
+  for (const item of items) {
+    await pool.query(
+      "INSERT INTO materials (id, user_id, name, description, unit, unit_cost, trade, supplier) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING",
+      [crypto.randomUUID(), userId, item.name, `${item.sku} — ${item.description}`, item.unit, item.unit_cost, item.trade, item.supplier]
+    );
+    count++;
+  }
+  return { imported: count, total: items.length };
 });
 
 export const saveSignature = makeAuthFn("materials.saveSignature", async (args: { data: { estimateId: string; signatureData: string } }, _userId, pool) => {
