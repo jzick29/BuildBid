@@ -2,6 +2,18 @@ import { makeAuthFn, makePublicFn } from "./iso";
 
 export const sendChangeOrder = makeAuthFn("changeOrderWorkflow.sendChangeOrder", async (args: { data: { changeOrderId: string } }, _userId, pool) => {
   await pool.query("UPDATE change_orders SET status = 'sent', updated_at = NOW() WHERE id = $1 AND status = 'draft'", [args.data.changeOrderId]);
+
+  // Fire push notification
+  try {
+    const coR = await pool.query("SELECT co.title, e.project_name, co.estimate_id FROM change_orders co JOIN estimates e ON e.id = co.estimate_id WHERE co.id = $1", [args.data.changeOrderId]);
+    if (coR.rows[0]) {
+      const { sendPushNotification } = await import("./push");
+      await sendPushNotification(_userId, "Change Order Sent", `${coR.rows[0].title} for ${coR.rows[0].project_name} was sent`, `/estimates/${coR.rows[0].estimate_id}`);
+      await pool.query("INSERT INTO automation_logs (id, user_id, type, estimate_id) VALUES ($1,$2,$3,$4)",
+        [crypto.randomUUID(), _userId, "change_order_sent", coR.rows[0].estimate_id]);
+    }
+  } catch (e) { console.error("[change-order] Notification error:", e); }
+
   return { success: true };
 });
 

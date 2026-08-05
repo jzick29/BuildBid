@@ -10,6 +10,15 @@ export const createInvoice = makeAuthFnFull("invoices.createInvoice", async (arg
   const dueDate = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
   const id = crypto.randomUUID();
   await pool.query("INSERT INTO invoices (id, estimate_id, user_id, invoice_number, status, due_date, total) VALUES ($1,$2,$3,$4,$5,$6,$7)", [id, args.data.estimateId, user.id, invNum, "draft", dueDate, total]);
+
+  // Fire push notification
+  try {
+    const { sendPushNotification } = await import("./push");
+    await sendPushNotification(user.id, "Invoice Created", `Invoice #${invNum} created for ${estR.rows[0].project_name}`, `/invoices/${id}`);
+    await pool.query("INSERT INTO automation_logs (id, user_id, type, estimate_id) VALUES ($1,$2,$3,$4)",
+      [crypto.randomUUID(), user.id, "invoice_created", args.data.estimateId]);
+  } catch (e) { console.error("[invoices] Notification error:", e); }
+
   return { id, invoiceNumber: invNum };
 });
 

@@ -21,6 +21,7 @@ import "~/lib/invoices";
 import "~/lib/iso";
 import "~/lib/job-costing";
 import "~/lib/materials";
+import "~/lib/notifications";
 import "~/lib/payments";
 import "~/lib/photos";
 import "~/lib/price-lists";
