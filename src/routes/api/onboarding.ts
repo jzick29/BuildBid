@@ -1,5 +1,6 @@
 // POST /api/onboarding — saves onboarding data and marks onboarding as complete
 import { getPool } from "../../lib/pool";
+import { trackEvent } from "../../lib/analytics";
 
 export async function POST({ request }: { request: Request }) {
   const pool = getPool();
@@ -35,6 +36,8 @@ export async function POST({ request }: { request: Request }) {
       "UPDATE users SET trade = $1, phone = $2, name = COALESCE(NULLIF($3, ''), name), onboarding_completed = 1 WHERE id = $4",
       [trade, phone || "", company_name || "", userId]
     );
+
+    void trackEvent(pool, userId, "onboarding_completed", { trade, phone: phone || "", company_name: company_name || "" });
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { "Content-Type": "application/json" },
