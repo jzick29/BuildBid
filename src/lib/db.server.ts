@@ -246,6 +246,60 @@ export async function getDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_ti_token ON team_invites(token);
+    CREATE TABLE IF NOT EXISTS xero_tokens (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS xero_sync_log (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT,
+      xero_id TEXT,
+      direction TEXT NOT NULL DEFAULT 'export',
+      status TEXT DEFAULT 'completed',
+      message TEXT,
+      synced_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS salesforce_tokens (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT NOT NULL DEFAULT '',
+      instance_url TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS salesforce_sync (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      estimate_id TEXT,
+      sf_opportunity_id TEXT,
+      status TEXT NOT NULL DEFAULT 'success',
+      message TEXT,
+      synced_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS hubspot_tokens (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT NOT NULL DEFAULT '',
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS hubspot_sync (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      estimate_id TEXT,
+      hs_deal_id TEXT,
+      status TEXT NOT NULL DEFAULT 'success',
+      message TEXT,
+      synced_at TEXT DEFAULT (datetime('now'))
+    );
     CREATE TABLE IF NOT EXISTS qbo_tokens (
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       access_token TEXT NOT NULL,
@@ -677,6 +731,10 @@ export async function getDb() {
   try { db.run("ALTER TABLE users ADD COLUMN frozen INTEGER NOT NULL DEFAULT 0"); } catch {}
   try { db.run("ALTER TABLE users ADD COLUMN email_notifications INTEGER NOT NULL DEFAULT 1"); } catch {}
   try { db.run("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT DEFAULT NULL"); } catch {}
+  try { db.run("ALTER TABLE users ADD COLUMN trade TEXT DEFAULT ''"); } catch {}
+  try { db.run("ALTER TABLE users ADD COLUMN phone TEXT DEFAULT ''"); } catch {}
+  try { db.run("ALTER TABLE users ADD COLUMN onboarding_completed INTEGER NOT NULL DEFAULT 0"); } catch {}
+  try { db.run("ALTER TABLE users ADD COLUMN margin_threshold REAL NOT NULL DEFAULT 20"); } catch {}
   try { db.run("ALTER TABLE proposals ADD COLUMN pdf_data TEXT DEFAULT NULL"); } catch {}
   try { db.run("ALTER TABLE proposals ADD COLUMN sent_to_email TEXT DEFAULT NULL"); } catch {}
   try { db.run("ALTER TABLE proposals ADD COLUMN sent_at TEXT DEFAULT NULL"); } catch {}
@@ -690,6 +748,11 @@ export async function getDb() {
   try { db.run("CREATE TABLE IF NOT EXISTS qbo_tokens (user_id TEXT PRIMARY KEY, access_token TEXT NOT NULL, refresh_token TEXT NOT NULL, realm_id TEXT NOT NULL, expires_at TEXT NOT NULL, updated_at TEXT DEFAULT (datetime('now')))"); } catch {}
   try { db.run("CREATE TABLE IF NOT EXISTS qbo_sync_log (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT, qbo_id TEXT, direction TEXT NOT NULL DEFAULT 'export', status TEXT DEFAULT 'completed', message TEXT, synced_at TEXT DEFAULT (datetime('now')))"); } catch {}
   try { db.run("ALTER TABLE invoices ADD COLUMN qbo_invoice_id TEXT DEFAULT NULL"); } catch {}
+  try { db.run("ALTER TABLE invoices ADD COLUMN xero_invoice_id TEXT DEFAULT NULL"); } catch {}
+  try { db.run("CREATE TABLE IF NOT EXISTS salesforce_tokens (user_id TEXT PRIMARY KEY, access_token TEXT NOT NULL, refresh_token TEXT DEFAULT '', instance_url TEXT NOT NULL, updated_at TEXT DEFAULT (datetime('now')))"); } catch {}
+  try { db.run("CREATE TABLE IF NOT EXISTS salesforce_sync (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, estimate_id TEXT, sf_opportunity_id TEXT, status TEXT DEFAULT 'success', message TEXT, synced_at TEXT DEFAULT (datetime('now')))"); } catch {}
+  try { db.run("CREATE TABLE IF NOT EXISTS hubspot_tokens (user_id TEXT PRIMARY KEY, access_token TEXT NOT NULL, refresh_token TEXT DEFAULT '', expires_at TEXT NOT NULL, updated_at TEXT DEFAULT (datetime('now')))"); } catch {}
+  try { db.run("CREATE TABLE IF NOT EXISTS hubspot_sync (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, estimate_id TEXT, hs_deal_id TEXT, status TEXT DEFAULT 'success', message TEXT, synced_at TEXT DEFAULT (datetime('now')))"); } catch {}
   // Seed admin: if ADMIN_EMAIL is set, promote that user to admin.
   // Otherwise, promote the first-created user (lowest created_at).
   try {

@@ -11,16 +11,20 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as TeamRouteImport } from './routes/team'
+import { Route as TakeoffRouteImport } from './routes/takeoff'
 import { Route as SubscribeRouteImport } from './routes/subscribe'
+import { Route as SubcontractorsRouteImport } from './routes/subcontractors'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ShareRouteImport } from './routes/share'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as PriceListsRouteImport } from './routes/price-lists'
 import { Route as PortalAccessRouteImport } from './routes/portal-access'
 import { Route as PipelineRouteImport } from './routes/pipeline'
 import { Route as PaymentSuccessRouteImport } from './routes/payment-success'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as MaterialsRouteImport } from './routes/materials'
 import { Route as LogoutRouteImport } from './routes/logout'
 import { Route as LoginRouteImport } from './routes/login'
@@ -55,6 +59,8 @@ import { Route as EstimatesIdRouteImport } from './routes/estimates.$id'
 import { Route as ContractsIdRouteImport } from './routes/contracts.$id'
 import { Route as CoIdRouteImport } from './routes/co.$id'
 import { Route as ChangeOrdersIdRouteImport } from './routes/change-orders.$id'
+import { Route as TemplatesMarketplaceIndexRouteImport } from './routes/templates/marketplace/index'
+import { Route as TemplatesMarketplaceListingIdRouteImport } from './routes/templates/marketplace/$listingId'
 import { Route as PortalEstimateIdRouteImport } from './routes/portal/estimate.$id'
 import { Route as PortalChangeOrderIdRouteImport } from './routes/portal/change-order.$id'
 
@@ -68,9 +74,19 @@ const TeamRoute = TeamRouteImport.update({
   path: '/team',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TakeoffRoute = TakeoffRouteImport.update({
+  id: '/takeoff',
+  path: '/takeoff',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SubscribeRoute = SubscribeRouteImport.update({
   id: '/subscribe',
   path: '/subscribe',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SubcontractorsRoute = SubcontractorsRouteImport.update({
+  id: '/subcontractors',
+  path: '/subcontractors',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignupRoute = SignupRouteImport.update({
@@ -98,6 +114,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PriceListsRoute = PriceListsRouteImport.update({
   id: '/price-lists',
   path: '/price-lists',
@@ -116,6 +137,11 @@ const PipelineRoute = PipelineRouteImport.update({
 const PaymentSuccessRoute = PaymentSuccessRouteImport.update({
   id: '/payment-success',
   path: '/payment-success',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MaterialsRoute = MaterialsRouteImport.update({
@@ -290,6 +316,18 @@ const ChangeOrdersIdRoute = ChangeOrdersIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ChangeOrdersRoute,
 } as any)
+const TemplatesMarketplaceIndexRoute =
+  TemplatesMarketplaceIndexRouteImport.update({
+    id: '/marketplace/',
+    path: '/marketplace/',
+    getParentRoute: () => TemplatesRoute,
+  } as any)
+const TemplatesMarketplaceListingIdRoute =
+  TemplatesMarketplaceListingIdRouteImport.update({
+    id: '/marketplace/$listingId',
+    path: '/marketplace/$listingId',
+    getParentRoute: () => TemplatesRoute,
+  } as any)
 const PortalEstimateIdRoute = PortalEstimateIdRouteImport.update({
   id: '/portal/estimate/$id',
   path: '/portal/estimate/$id',
@@ -321,18 +359,22 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/logout': typeof LogoutRoute
   '/materials': typeof MaterialsRoute
+  '/onboarding': typeof OnboardingRoute
   '/payment-success': typeof PaymentSuccessRoute
   '/pipeline': typeof PipelineRoute
   '/portal-access': typeof PortalAccessRoute
   '/price-lists': typeof PriceListsRoute
+  '/reports': typeof ReportsRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schedule': typeof ScheduleRoute
   '/settings': typeof SettingsRoute
   '/share': typeof ShareRoute
   '/signup': typeof SignupRoute
+  '/subcontractors': typeof SubcontractorsRoute
   '/subscribe': typeof SubscribeRouteWithChildren
+  '/takeoff': typeof TakeoffRoute
   '/team': typeof TeamRoute
-  '/templates': typeof TemplatesRoute
+  '/templates': typeof TemplatesRouteWithChildren
   '/change-orders/$id': typeof ChangeOrdersIdRoute
   '/co/$id': typeof CoIdRoute
   '/contracts/$id': typeof ContractsIdRoute
@@ -350,6 +392,8 @@ export interface FileRoutesByFullPath {
   '/portal/': typeof PortalIndexRoute
   '/portal/change-order/$id': typeof PortalChangeOrderIdRoute
   '/portal/estimate/$id': typeof PortalEstimateIdRoute
+  '/templates/marketplace/$listingId': typeof TemplatesMarketplaceListingIdRoute
+  '/templates/marketplace/': typeof TemplatesMarketplaceIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -370,18 +414,22 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/logout': typeof LogoutRoute
   '/materials': typeof MaterialsRoute
+  '/onboarding': typeof OnboardingRoute
   '/payment-success': typeof PaymentSuccessRoute
   '/pipeline': typeof PipelineRoute
   '/portal-access': typeof PortalAccessRoute
   '/price-lists': typeof PriceListsRoute
+  '/reports': typeof ReportsRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schedule': typeof ScheduleRoute
   '/settings': typeof SettingsRoute
   '/share': typeof ShareRoute
   '/signup': typeof SignupRoute
+  '/subcontractors': typeof SubcontractorsRoute
   '/subscribe': typeof SubscribeRouteWithChildren
+  '/takeoff': typeof TakeoffRoute
   '/team': typeof TeamRoute
-  '/templates': typeof TemplatesRoute
+  '/templates': typeof TemplatesRouteWithChildren
   '/change-orders/$id': typeof ChangeOrdersIdRoute
   '/co/$id': typeof CoIdRoute
   '/contracts/$id': typeof ContractsIdRoute
@@ -399,6 +447,8 @@ export interface FileRoutesByTo {
   '/portal': typeof PortalIndexRoute
   '/portal/change-order/$id': typeof PortalChangeOrderIdRoute
   '/portal/estimate/$id': typeof PortalEstimateIdRoute
+  '/templates/marketplace/$listingId': typeof TemplatesMarketplaceListingIdRoute
+  '/templates/marketplace': typeof TemplatesMarketplaceIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -421,18 +471,22 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/logout': typeof LogoutRoute
   '/materials': typeof MaterialsRoute
+  '/onboarding': typeof OnboardingRoute
   '/payment-success': typeof PaymentSuccessRoute
   '/pipeline': typeof PipelineRoute
   '/portal-access': typeof PortalAccessRoute
   '/price-lists': typeof PriceListsRoute
+  '/reports': typeof ReportsRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schedule': typeof ScheduleRoute
   '/settings': typeof SettingsRoute
   '/share': typeof ShareRoute
   '/signup': typeof SignupRoute
+  '/subcontractors': typeof SubcontractorsRoute
   '/subscribe': typeof SubscribeRouteWithChildren
+  '/takeoff': typeof TakeoffRoute
   '/team': typeof TeamRoute
-  '/templates': typeof TemplatesRoute
+  '/templates': typeof TemplatesRouteWithChildren
   '/change-orders/$id': typeof ChangeOrdersIdRoute
   '/co/$id': typeof CoIdRoute
   '/contracts/$id': typeof ContractsIdRoute
@@ -450,6 +504,8 @@ export interface FileRoutesById {
   '/portal/': typeof PortalIndexRoute
   '/portal/change-order/$id': typeof PortalChangeOrderIdRoute
   '/portal/estimate/$id': typeof PortalEstimateIdRoute
+  '/templates/marketplace/$listingId': typeof TemplatesMarketplaceListingIdRoute
+  '/templates/marketplace/': typeof TemplatesMarketplaceIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -473,16 +529,20 @@ export interface FileRouteTypes {
     | '/login'
     | '/logout'
     | '/materials'
+    | '/onboarding'
     | '/payment-success'
     | '/pipeline'
     | '/portal-access'
     | '/price-lists'
+    | '/reports'
     | '/reset-password'
     | '/schedule'
     | '/settings'
     | '/share'
     | '/signup'
+    | '/subcontractors'
     | '/subscribe'
+    | '/takeoff'
     | '/team'
     | '/templates'
     | '/change-orders/$id'
@@ -502,6 +562,8 @@ export interface FileRouteTypes {
     | '/portal/'
     | '/portal/change-order/$id'
     | '/portal/estimate/$id'
+    | '/templates/marketplace/$listingId'
+    | '/templates/marketplace/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -522,16 +584,20 @@ export interface FileRouteTypes {
     | '/login'
     | '/logout'
     | '/materials'
+    | '/onboarding'
     | '/payment-success'
     | '/pipeline'
     | '/portal-access'
     | '/price-lists'
+    | '/reports'
     | '/reset-password'
     | '/schedule'
     | '/settings'
     | '/share'
     | '/signup'
+    | '/subcontractors'
     | '/subscribe'
+    | '/takeoff'
     | '/team'
     | '/templates'
     | '/change-orders/$id'
@@ -551,6 +617,8 @@ export interface FileRouteTypes {
     | '/portal'
     | '/portal/change-order/$id'
     | '/portal/estimate/$id'
+    | '/templates/marketplace/$listingId'
+    | '/templates/marketplace'
   id:
     | '__root__'
     | '/'
@@ -572,16 +640,20 @@ export interface FileRouteTypes {
     | '/login'
     | '/logout'
     | '/materials'
+    | '/onboarding'
     | '/payment-success'
     | '/pipeline'
     | '/portal-access'
     | '/price-lists'
+    | '/reports'
     | '/reset-password'
     | '/schedule'
     | '/settings'
     | '/share'
     | '/signup'
+    | '/subcontractors'
     | '/subscribe'
+    | '/takeoff'
     | '/team'
     | '/templates'
     | '/change-orders/$id'
@@ -601,6 +673,8 @@ export interface FileRouteTypes {
     | '/portal/'
     | '/portal/change-order/$id'
     | '/portal/estimate/$id'
+    | '/templates/marketplace/$listingId'
+    | '/templates/marketplace/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -623,18 +697,22 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   LogoutRoute: typeof LogoutRoute
   MaterialsRoute: typeof MaterialsRoute
+  OnboardingRoute: typeof OnboardingRoute
   PaymentSuccessRoute: typeof PaymentSuccessRoute
   PipelineRoute: typeof PipelineRoute
   PortalAccessRoute: typeof PortalAccessRoute
   PriceListsRoute: typeof PriceListsRoute
+  ReportsRoute: typeof ReportsRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   ScheduleRoute: typeof ScheduleRoute
   SettingsRoute: typeof SettingsRoute
   ShareRoute: typeof ShareRoute
   SignupRoute: typeof SignupRoute
+  SubcontractorsRoute: typeof SubcontractorsRoute
   SubscribeRoute: typeof SubscribeRouteWithChildren
+  TakeoffRoute: typeof TakeoffRoute
   TeamRoute: typeof TeamRoute
-  TemplatesRoute: typeof TemplatesRoute
+  TemplatesRoute: typeof TemplatesRouteWithChildren
   CoIdRoute: typeof CoIdRoute
   PortalLoginRoute: typeof PortalLoginRoute
   SignEstimateIdRoute: typeof SignEstimateIdRoute
@@ -661,11 +739,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TeamRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/takeoff': {
+      id: '/takeoff'
+      path: '/takeoff'
+      fullPath: '/takeoff'
+      preLoaderRoute: typeof TakeoffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/subscribe': {
       id: '/subscribe'
       path: '/subscribe'
       fullPath: '/subscribe'
       preLoaderRoute: typeof SubscribeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/subcontractors': {
+      id: '/subcontractors'
+      path: '/subcontractors'
+      fullPath: '/subcontractors'
+      preLoaderRoute: typeof SubcontractorsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -703,6 +795,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/price-lists': {
       id: '/price-lists'
       path: '/price-lists'
@@ -729,6 +828,13 @@ declare module '@tanstack/react-router' {
       path: '/payment-success'
       fullPath: '/payment-success'
       preLoaderRoute: typeof PaymentSuccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/materials': {
@@ -969,6 +1075,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChangeOrdersIdRouteImport
       parentRoute: typeof ChangeOrdersRoute
     }
+    '/templates/marketplace/': {
+      id: '/templates/marketplace/'
+      path: '/marketplace'
+      fullPath: '/templates/marketplace/'
+      preLoaderRoute: typeof TemplatesMarketplaceIndexRouteImport
+      parentRoute: typeof TemplatesRoute
+    }
+    '/templates/marketplace/$listingId': {
+      id: '/templates/marketplace/$listingId'
+      path: '/marketplace/$listingId'
+      fullPath: '/templates/marketplace/$listingId'
+      preLoaderRoute: typeof TemplatesMarketplaceListingIdRouteImport
+      parentRoute: typeof TemplatesRoute
+    }
     '/portal/estimate/$id': {
       id: '/portal/estimate/$id'
       path: '/portal/estimate/$id'
@@ -1054,6 +1174,20 @@ const SubscribeRouteWithChildren = SubscribeRoute._addFileChildren(
   SubscribeRouteChildren,
 )
 
+interface TemplatesRouteChildren {
+  TemplatesMarketplaceListingIdRoute: typeof TemplatesMarketplaceListingIdRoute
+  TemplatesMarketplaceIndexRoute: typeof TemplatesMarketplaceIndexRoute
+}
+
+const TemplatesRouteChildren: TemplatesRouteChildren = {
+  TemplatesMarketplaceListingIdRoute: TemplatesMarketplaceListingIdRoute,
+  TemplatesMarketplaceIndexRoute: TemplatesMarketplaceIndexRoute,
+}
+
+const TemplatesRouteWithChildren = TemplatesRoute._addFileChildren(
+  TemplatesRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
@@ -1074,18 +1208,22 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   LogoutRoute: LogoutRoute,
   MaterialsRoute: MaterialsRoute,
+  OnboardingRoute: OnboardingRoute,
   PaymentSuccessRoute: PaymentSuccessRoute,
   PipelineRoute: PipelineRoute,
   PortalAccessRoute: PortalAccessRoute,
   PriceListsRoute: PriceListsRoute,
+  ReportsRoute: ReportsRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   ScheduleRoute: ScheduleRoute,
   SettingsRoute: SettingsRoute,
   ShareRoute: ShareRoute,
   SignupRoute: SignupRoute,
+  SubcontractorsRoute: SubcontractorsRoute,
   SubscribeRoute: SubscribeRouteWithChildren,
+  TakeoffRoute: TakeoffRoute,
   TeamRoute: TeamRoute,
-  TemplatesRoute: TemplatesRoute,
+  TemplatesRoute: TemplatesRouteWithChildren,
   CoIdRoute: CoIdRoute,
   PortalLoginRoute: PortalLoginRoute,
   SignEstimateIdRoute: SignEstimateIdRoute,

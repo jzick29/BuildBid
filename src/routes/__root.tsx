@@ -93,6 +93,8 @@ const navSections: NavSection[] = [
     items: [
       { href: "/schedule", label: "Schedule", icon: "schedule" },
       { href: "/pipeline", label: "Pipeline", icon: "pipeline" },
+      { href: "/subcontractors", label: "Subcontractors", icon: "team" },
+      { href: "/takeoff", label: "Takeoff", icon: "schedule" },
       { href: "/materials", label: "Materials", icon: "materials" },
       { href: "/price-lists", label: "Price Lists", icon: "priceLists" },
       { href: "/customers", label: "Customers", icon: "customers" },
@@ -102,6 +104,7 @@ const navSections: NavSection[] = [
     label: "Insights",
     items: [
       { href: "/analytics", label: "Analytics", icon: "analytics" },
+      { href: "/reports", label: "Reports", icon: "analytics" },
       { href: "/team", label: "Team", icon: "team" },
       { href: "/automation", label: "Automations", icon: "automations" },
     ],
@@ -144,13 +147,26 @@ function RootComponent() {
 function DesktopNav() {
   const location = useLocation();
   const [user, setUser] = useState<any>(null);
+  const [branding, setBranding] = useState<any>(null);
 
   useEffect(() => {
     fetch("/api/me", { credentials: "include" })
       .then(r => r.json())
       .then(d => { if (d?.user) setUser(d.user); })
       .catch(() => {});
+    fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "branding.get", args: {} }), credentials: "include" })
+      .then(r => r.json())
+      .then(d => {
+        if (d?.branding) {
+          setBranding(d.branding);
+          if (d.branding.company_name) document.title = d.branding.company_name + (d.branding.white_label ? "" : " — BuildBid");
+          else if (d.branding.white_label) document.title = "Estimating & Proposals";
+        }
+      })
+      .catch(() => {});
   }, []);
+  const brandName = branding?.company_name || (branding?.white_label ? "Estimating & Proposals" : "BuildBid");
+  const brandColor = branding?.primary_color || "#4f46e5";
 
   const isAdmin = user?.role === "admin";
 
@@ -168,7 +184,10 @@ function DesktopNav() {
   return (
     <aside className="hidden sm:flex sm:flex-col sm:fixed sm:inset-y-0 sm:left-0 sm:w-56 sm:border-r sm:border-gray-200 sm:bg-white sm:dark:border-gray-800 sm:dark:bg-gray-950 sm:z-40">
       <div className="flex h-14 items-center border-b border-gray-200 px-4 dark:border-gray-800 shrink-0">
-        <a href="/dashboard" className="text-lg font-bold tracking-tight text-indigo-600 dark:text-indigo-400">BuildBid</a>
+        <a href="/dashboard" className="flex items-center gap-2">
+          {branding?.logo_url ? <img src={branding.logo_url} alt="logo" className="h-6 w-6 rounded object-contain" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} /> : null}
+          <span className="text-lg font-bold tracking-tight" style={{ color: brandColor }}>{brandName}</span>
+        </a>
       </div>
       <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-5">
         {navSections.map((section) => {
@@ -265,6 +284,9 @@ function MobileNav() {
               {[
                 { href: "/schedule", label: "Schedule", icon: "schedule" },
                 { href: "/pipeline", label: "Pipeline", icon: "pipeline" },
+                { href: "/subcontractors", label: "Subcontractors", icon: "team" },
+                { href: "/takeoff", label: "Takeoff", icon: "schedule" },
+      { href: "/takeoff", label: "Takeoff", icon: "schedule" },
                 { href: "/materials", label: "Materials", icon: "materials" },
                 { href: "/price-lists", label: "Price Lists", icon: "priceLists" },
                 { href: "/customers", label: "Customers", icon: "customers" },

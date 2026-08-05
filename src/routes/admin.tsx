@@ -17,7 +17,7 @@ function AdminDashboard() {
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState("");
-  const [tab, setTab] = useState<"users"|"payments"|"overview"|"audit"|"health">("users");
+  const [tab, setTab] = useState<"users"|"payments"|"overview"|"audit"|"health"|"sms">("users");
 
   const loadData = async () => {
     const meRes = await fetch("/api/me", { credentials: "include" });
@@ -51,6 +51,11 @@ function AdminDashboard() {
   const loadPaymentStats = async () => {
     const r = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "admin.getPaymentStats", args: {} }), credentials: "include" }).then(r => r.json());
     setPaymentStats(r);
+  };
+  const [smsLogs, setSmsLogs] = useState<any[]>([]);
+  const loadSmsLogs = async () => {
+    const r = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "sms.adminGetLogs", args: { data: { limit: 100 } } }), credentials: "include" }).then(r => r.json());
+    setSmsLogs(Array.isArray(r.logs) ? r.logs : []);
   };
 
   useEffect(() => { loadData(); }, []);
@@ -116,8 +121,8 @@ function AdminDashboard() {
 
         {/* Tabs */}
         <div className="mt-6 flex gap-2 border-b border-gray-200 dark:border-gray-800 pb-px">
-          {[{ key: "users", label: "Users" }, { key: "payments", label: "Payments" }, { key: "overview", label: "Overview" }, { key: "audit", label: "Audit Log" }, { key: "health", label: "Health" }].map(t => (
-            <button key={t.key} onClick={() => { setTab(t.key as any); if (t.key === "payments") loadPayments(); if (t.key === "overview") loadPaymentStats(); if (t.key === "audit") loadAuditLog(); if (t.key === "health") { loadHealth(); loadPlatformStats(); } }}
+          {[{ key: "users", label: "Users" }, { key: "payments", label: "Payments" }, { key: "overview", label: "Overview" }, { key: "audit", label: "Audit Log" }, { key: "health", label: "Health" }, { key: "sms", label: "SMS Logs" }].map(t => (
+            <button key={t.key} onClick={() => { setTab(t.key as any); if (t.key === "payments") loadPayments(); if (t.key === "overview") loadPaymentStats(); if (t.key === "audit") loadAuditLog(); if (t.key === "health") { loadHealth(); loadPlatformStats(); } if (t.key === "sms") loadSmsLogs(); }}
               className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${tab === t.key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
               {t.label}
             </button>
@@ -297,6 +302,34 @@ function AdminDashboard() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+        {tab === "sms" && (
+          <div className="mt-6">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">SMS Delivery Log</h3>
+              <button onClick={loadSmsLogs} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900">Refresh</button>
+            </div>
+            {smsLogs.length > 0 ? (
+              <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-950 dark:text-gray-400"><tr><th className="px-3 py-2">User</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">To</th><th className="px-3 py-2">Type</th><th className="px-3 py-2">Message</th><th className="px-3 py-2">Provider</th><th className="px-3 py-2">Time</th></tr></thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-900">
+                    {smsLogs.map((l: any) => (
+                      <tr key={l.id}>
+                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{l.user_email || l.user_id?.slice(0, 8)}</td>
+                        <td className="px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${l.status === "sent" ? "bg-emerald-50 text-emerald-700" : l.status === "dry_run" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"} dark:bg-opacity-20`}>{l.status}</span></td>
+                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{l.to_phone}</td>
+                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{l.type}</td>
+                        <td className="max-w-[280px] truncate px-3 py-2 text-gray-600 dark:text-gray-400" title={l.message}>{l.message}</td>
+                        <td className="px-3 py-2 text-gray-500">{l.provider}</td>
+                        <td className="px-3 py-2 text-gray-500">{new Date(l.created_at).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : <p className="mt-4 text-sm text-gray-400">No SMS activity yet</p>}
           </div>
         )}
       </main>

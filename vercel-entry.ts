@@ -7,6 +7,19 @@ import { Pool } from "pg";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import handler from "./dist/server/server.js";
 import { parseEstimateFromDescription, estimateFromDescription } from "./src/lib/ai-prompts";
+import { sendSms, findCustomerPhone, getSmsSettings, saveSmsSettings, getSmsLogs, getAdminSmsLogs } from "./src/lib/sms";
+import { getReportFilters, getProfitability, getWinLoss, getEstimatorPerformance, getRevenueTrends, getCostBreakdown } from "./src/lib/reports";
+import { publishListing, unpublishListing, getMyListings, searchListings, getListingDetail, checkoutListing, installListing, rateListing } from "./src/lib/marketplace";
+import { listRfqs, getRfq, createRfq, updateRfqStatus, addQuote, updateQuoteStatus, deleteQuote, compareQuotes } from "./src/lib/subcontractors";
+import { getBranding, saveBranding } from "./src/lib/branding";
+import { listTakeoffs, getTakeoff, createTakeoff, setScale, addMeasurement, deleteMeasurement, deleteTakeoff } from "./src/lib/takeoff";
+import {
+  getCalendarStatus, getCalendarAuthUrl, disconnectCalendar, getCalendarEvents, createCalendarEvent, deleteCalendarEvent, autoSyncScheduled,
+  getGoogleToken, storeGoogleToken, exchangeGoogleCode,
+} from "./src/lib/google-calendar";
+import {
+  listApiKeys, createApiKey, revokeApiKey, listWebhooks, createWebhook, updateWebhook, deleteWebhook, testFireWebhook, getWebhookLogs, getZapierManifest, fireWebhook, verifyApiKey,
+} from "./src/lib/webhooks";
 
 const getPool = () => {
   if (!(globalThis as any).__buildbid_pool) {
@@ -177,6 +190,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
       `);
       // Migrations: add columns that may not exist in existing databases
       try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS source TEXT DEFAULT ''"); } catch {}
+      try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_enabled INTEGER NOT NULL DEFAULT 1"); } catch {}
       try { await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS tax_rate REAL NOT NULL DEFAULT 0"); } catch {}
       try { await pool.query("ALTER TABLE line_items ADD COLUMN IF NOT EXISTS tax_rate REAL NOT NULL DEFAULT 0"); } catch {}
       // Fix existing TEXT columns to TIMESTAMPTZ (legacy migration)
@@ -220,6 +234,14 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         `CREATE TABLE IF NOT EXISTS templates (id TEXT PRIMARY KEY, name TEXT NOT NULL, trade_type TEXT NOT NULL, description TEXT DEFAULT '', user_id TEXT REFERENCES users(id) ON DELETE SET NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `CREATE TABLE IF NOT EXISTS template_line_items (id TEXT PRIMARY KEY, template_id TEXT NOT NULL REFERENCES templates(id) ON DELETE CASCADE, description TEXT NOT NULL, quantity REAL NOT NULL DEFAULT 1, unit TEXT NOT NULL DEFAULT 'each', unit_cost REAL NOT NULL DEFAULT 0, markup_percent REAL NOT NULL DEFAULT 10, sort_order INTEGER NOT NULL DEFAULT 0)`,
         `CREATE TABLE IF NOT EXISTS template_shares (id TEXT PRIMARY KEY, template_id TEXT NOT NULL REFERENCES templates(id) ON DELETE CASCADE, shared_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, token TEXT UNIQUE NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS template_listings (id TEXT PRIMARY KEY, template_id TEXT NOT NULL REFERENCES templates(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, description TEXT DEFAULT '', trade TEXT NOT NULL DEFAULT 'general', tags TEXT DEFAULT '', price_cents INTEGER NOT NULL DEFAULT 0, is_published INTEGER NOT NULL DEFAULT 1, downloads INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS template_ratings (id TEXT PRIMARY KEY, listing_id TEXT NOT NULL REFERENCES template_listings(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, rating INTEGER NOT NULL DEFAULT 5, review TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS template_installs (id TEXT PRIMARY KEY, listing_id TEXT NOT NULL REFERENCES template_listings(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'installed', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS rfqs (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, estimate_id TEXT REFERENCES estimates(id) ON DELETE SET NULL, scope TEXT DEFAULT '', due_date TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'open', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS rfq_quotes (id TEXT PRIMARY KEY, rfq_id TEXT NOT NULL REFERENCES rfqs(id) ON DELETE CASCADE, subcontractor TEXT NOT NULL, contact TEXT DEFAULT '', email TEXT DEFAULT '', phone TEXT DEFAULT '', amount REAL NOT NULL DEFAULT 0, timeline TEXT DEFAULT '', notes TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', received_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS branding (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, company_name TEXT DEFAULT '', logo_url TEXT DEFAULT '', primary_color TEXT NOT NULL DEFAULT '#4f46e5', accent_color TEXT NOT NULL DEFAULT '#0ea5e9', custom_domain TEXT DEFAULT '', white_label INTEGER NOT NULL DEFAULT 0, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS takeoff_projects (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, image_url TEXT NOT NULL, scale_label TEXT DEFAULT '', pixels_per_unit REAL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS takeoff_measurements (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES takeoff_projects(id) ON DELETE CASCADE, label TEXT DEFAULT '', kind TEXT NOT NULL DEFAULT 'line', points TEXT NOT NULL, value REAL NOT NULL DEFAULT 0, unit TEXT NOT NULL DEFAULT 'ft', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
         `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS customer_id TEXT`,
         `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS auto_renew BOOLEAN NOT NULL DEFAULT false`,
         `ALTER TABLE contracts ADD COLUMN IF NOT EXISTS renewal_notice_days INTEGER NOT NULL DEFAULT 30`,
@@ -267,6 +289,20 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         `CREATE INDEX IF NOT EXISTS idx_cu_user ON client_users(user_id)`,
         `CREATE INDEX IF NOT EXISTS idx_cs_client ON client_sessions(client_user_id)`,
         `CREATE INDEX IF NOT EXISTS idx_estimates_client ON estimates(client_user_id)`,
+        // === sms notifications ===
+        `CREATE TABLE IF NOT EXISTS sms_log (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, type TEXT NOT NULL DEFAULT 'custom', to_phone TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'dry_run', provider TEXT NOT NULL DEFAULT 'dry-run', error TEXT DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE INDEX IF NOT EXISTS idx_sms_log_user ON sms_log(user_id)`,
+        // === google calendar ===
+        `CREATE TABLE IF NOT EXISTS google_tokens (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, access_token TEXT NOT NULL, refresh_token TEXT DEFAULT '', calendar_id TEXT NOT NULL DEFAULT 'primary', expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE TABLE IF NOT EXISTS calendar_events (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, estimate_id TEXT REFERENCES estimates(id) ON DELETE CASCADE, google_event_id TEXT DEFAULT '', summary TEXT NOT NULL, event_start TEXT NOT NULL, event_end TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE INDEX IF NOT EXISTS idx_cal_events_user ON calendar_events(user_id)`,
+        // === webhook hub / api keys ===
+        `CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL DEFAULT 'API Key', key_prefix TEXT NOT NULL, key_hash TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0, last_used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id)`,
+        `CREATE TABLE IF NOT EXISTS webhook_endpoints (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL, url TEXT NOT NULL, events TEXT NOT NULL DEFAULT '[]', secret TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE INDEX IF NOT EXISTS idx_webhook_ep_user ON webhook_endpoints(user_id)`,
+        `CREATE TABLE IF NOT EXISTS webhook_logs (id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL REFERENCES webhook_endpoints(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, event TEXT NOT NULL, payload TEXT NOT NULL DEFAULT '{}', status_code INTEGER NOT NULL DEFAULT 0, response TEXT DEFAULT '', duration_ms INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE INDEX IF NOT EXISTS idx_webhook_logs_user ON webhook_logs(user_id)`,
         ];
         for (const t of appTables) {
         try { await pool.query(t); } catch (e) { console.error("App table create error:", e); }
@@ -308,6 +344,27 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
           const customerEmail = session.customer_details?.email || session.customer_email;
           const metaUserId = session.metadata?.userId;
           const metaPlan = session.metadata?.plan;
+          // Marketplace template purchase (one-time payment link)
+          const metaListing = session.metadata?.listing_id;
+          if (metaListing) {
+            let buyerId = metaUserId || "";
+            if (!buyerId && customerEmail) {
+              const uq = await pool.query("SELECT id FROM users WHERE email=$1", [customerEmail]);
+              if (uq.rows[0]) buyerId = uq.rows[0].id;
+            }
+            if (buyerId) {
+              const dup = await pool.query("SELECT 1 FROM template_installs WHERE listing_id=$1 AND user_id=$2 AND status='paid'", [metaListing, buyerId]);
+              if (!dup.rows[0]) {
+                await pool.query("INSERT INTO template_installs (id, listing_id, user_id, status) VALUES ($1,$2,$3,'paid')", [crypto.randomUUID(), metaListing, buyerId]);
+              }
+            }
+            try {
+              await pool.query("INSERT INTO payments (id, user_id, stripe_event_id, amount, currency, status, tier, customer_email, stripe_customer_id, created_at) VALUES ($1,$2,$3,$4,$5,'succeeded','marketplace',$6,$7,NOW())",
+                [crypto.randomUUID(), buyerId || null, event.id || "", session.amount_total || 0, session.currency || "usd", customerEmail || "", session.customer || null]);
+            } catch (pe: any) { console.error("[stripe-webhook] marketplace payments insert failed:", pe.message); }
+            res.statusCode = 200; res.end(JSON.stringify({ received: true, kind: "marketplace" }));
+            return;
+          }
           // Map amount_total to tier: 4900=starter, 9900=pro, 19900=shop
           const amountToTier: Record<number, string> = { 4900: "starter", 9900: "pro", 19900: "shop" };
           let tier = metaPlan || amountToTier[session.amount_total] || "";
@@ -381,6 +438,104 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         console.error("[ai/estimate] Error:", e?.message || e);
         res.statusCode = 500; res.end(JSON.stringify({ error: "AI estimate failed" }));
       }
+      return;
+    }
+    if (req.method === "POST" && url === "/api/sms/send") {
+      try {
+        const smsBody = await readBody(req);
+        const smsCookies = parseCookies(req);
+        const smsToken = smsCookies["buildbid_session"];
+        if (!smsToken) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+        const smsPool = getPool();
+        const smsAuth = await smsPool.query("SELECT u.id, u.frozen FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [smsToken]);
+        if (!smsAuth.rows[0]) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+        if (smsAuth.rows[0].frozen === 1) { res.statusCode = 403; res.end(JSON.stringify({ error: "Account frozen. Contact support." })); return; }
+        const smsUserId = smsAuth.rows[0].id;
+        const smsInput = smsBody || {};
+        const smsResult = await sendSms(smsPool, smsUserId, { to: smsInput.to, type: smsInput.type, message: smsInput.message, vars: smsInput.vars });
+        res.statusCode = smsResult.success ? 200 : 400;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(smsResult));
+      } catch (e: any) {
+        console.error("[sms/send] Error:", e?.message || e);
+        res.statusCode = 500; res.end(JSON.stringify({ error: "SMS send failed" }));
+      }
+      return;
+    }
+    // /api/google-oauth — Google Calendar OAuth2 callback (state = userId)
+    if (req.method === "GET" && url.startsWith("/api/google-oauth")) {
+      try {
+        const pool = getPool();
+        const parsed = new URL(url, "http://localhost");
+        const code = parsed.searchParams.get("code") || "";
+        const state = parsed.searchParams.get("state") || "";
+        const err = parsed.searchParams.get("error");
+        if (err) { res.statusCode = 302; res.setHeader("Location", (process.env.APP_URL || "https://buildbid.pro") + "/integrations?google=error"); res.end(); return; }
+        if (!code || !state) { res.statusCode = 400; res.end(JSON.stringify({ error: "Missing code or state" })); return; }
+        const tokens = await exchangeGoogleCode(code);
+        await storeGoogleToken(state, tokens.accessToken, tokens.refreshToken, tokens.expiresIn, null, pool);
+        res.statusCode = 302;
+        res.setHeader("Location", (process.env.APP_URL || "https://buildbid.pro") + "/integrations?google=connected");
+        res.end();
+      } catch (e: any) {
+        console.error("[google-oauth] Error:", e?.message || e);
+        res.statusCode = 302; res.setHeader("Location", (process.env.APP_URL || "https://buildbid.pro") + "/integrations?google=error"); res.end();
+      }
+      return;
+    }
+    // /api/v1/me — API-key auth check (Zapier test endpoint)
+    if (req.method === "GET" && url === "/api/v1/me") {
+      try {
+        const pool = getPool();
+        const apiKey = (req.headers["x-api-key"] as string) || "";
+        const uid = await verifyApiKey(pool, apiKey);
+        if (!uid) { res.statusCode = 401; res.end(JSON.stringify({ error: "Invalid API key" })); return; }
+        const u = (await pool.query("SELECT id, email, name, subscription_tier FROM users WHERE id = $1", [uid])).rows[0];
+        res.statusCode = 200; res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ ok: true, user: { id: u.id, email: u.email, name: u.name, tier: u.subscription_tier } }));
+      } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
+      return;
+    }
+    // /api/v1/webhook-pull — Zapier trigger: return recent events of a type
+    if (req.method === "GET" && url.startsWith("/api/v1/webhook-pull")) {
+      try {
+        const pool = getPool();
+        const apiKey = (req.headers["x-api-key"] as string) || "";
+        const uid = await verifyApiKey(pool, apiKey);
+        if (!uid) { res.statusCode = 401; res.end(JSON.stringify({ error: "Invalid API key" })); return; }
+        const parsed = new URL(url, "http://localhost");
+        const event = parsed.searchParams.get("event") || "";
+        let rows: any[] = [];
+        if (event === "estimate.won") {
+          rows = (await pool.query("SELECT id, project_name, customer_name, trade, status, updated_at FROM estimates WHERE user_id = $1 AND status = 'won' ORDER BY updated_at DESC LIMIT 50", [uid])).rows;
+        } else if (event === "estimate.sent") {
+          rows = (await pool.query("SELECT id, project_name, customer_name, trade, status, updated_at FROM estimates WHERE user_id = $1 AND status = 'sent' ORDER BY updated_at DESC LIMIT 50", [uid])).rows;
+        } else if (event === "invoice.paid") {
+          rows = (await pool.query("SELECT id, invoice_number, total, status, paid_at FROM invoices WHERE user_id = $1 AND status = 'paid' ORDER BY paid_at DESC NULLS LAST LIMIT 50", [uid])).rows;
+        } else {
+          rows = (await pool.query("SELECT id, project_name, customer_name, trade, status, updated_at FROM estimates WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 10", [uid])).rows;
+        }
+        res.statusCode = 200; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(rows));
+      } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
+      return;
+    }
+    // /api/v1/estimates — Zapier action: create estimate
+    if (req.method === "POST" && url === "/api/v1/estimates") {
+      try {
+        const pool = getPool();
+        const apiKey = (req.headers["x-api-key"] as string) || "";
+        const uid = await verifyApiKey(pool, apiKey);
+        if (!uid) { res.statusCode = 401; res.end(JSON.stringify({ error: "Invalid API key" })); return; }
+        const body = await readBody(req);
+        const projectName = String(body?.project_name || "").trim();
+        const customerName = String(body?.customer_name || "").trim();
+        if (!projectName || !customerName) { res.statusCode = 400; res.end(JSON.stringify({ error: "project_name and customer_name are required" })); return; }
+        const trade = String(body?.trade || "general").toLowerCase();
+        const eid = crypto.randomUUID();
+        await pool.query("INSERT INTO estimates (id, user_id, project_name, customer_name, trade, status) VALUES ($1,$2,$3,$4,$5,'draft')", [eid, uid, projectName, customerName, trade]);
+        res.statusCode = 200; res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ id: eid, project_name: projectName, customer_name: customerName, trade }));
+      } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message })); }
       return;
     }
     // /api/call
@@ -660,12 +815,45 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             const ids = d3.ids;
             const status = d3.status;
             if (!ids || !Array.isArray(ids) || ids.length === 0 || !status) { res.statusCode = 400; res.end(JSON.stringify({ error: "Missing ids or status" })); return; }
-            const validStatuses = ["draft", "sent", "won", "lost"];
+            const validStatuses = ["draft", "sent", "won", "lost", "scheduled", "in-progress", "completed"];
             if (!validStatuses.includes(status)) { res.statusCode = 400; res.end(JSON.stringify({ error: "Invalid status" })); return; }
             const placeholders = ids.map((_:any,i:number) => "$" + (i+2)).join(",");
             const sql = "UPDATE estimates SET status=$1, updated_at=NOW() WHERE id IN (" + placeholders + ") AND user_id=$" + (ids.length+2);
             await pool.query(sql,
               [status, ...ids, userId]);
+            // SMS alert when a proposal is accepted (won)
+            if (status === "won") {
+              try {
+                const ph2 = ids.map((_: any, i: number) => "$" + (i + 1)).join(",");
+                const estRows = (await pool.query("SELECT id, customer_name, project_name FROM estimates WHERE id IN (" + ph2 + ") AND user_id=$" + (ids.length + 1), [...ids, userId])).rows;
+                for (const est of estRows) {
+                  const phone = await findCustomerPhone(pool, userId, est.customer_name || "");
+                  if (phone) {
+                    await sendSms(pool, userId, { to: phone, type: "estimate_won", vars: { projectName: est.project_name || "", businessName: "", date: "" } });
+                  }
+                }
+              } catch (smsErr: any) { console.error("[sms] estimate won alert failed:", smsErr?.message || smsErr); }
+            }
+            // Fire webhooks + Google Calendar sync on status changes
+            try {
+              const ph3 = ids.map((_: any, i: number) => "$" + (i + 1)).join(",");
+              const estRows = (await pool.query("SELECT id, project_name, customer_name, trade, status, start_date, end_date FROM estimates WHERE id IN (" + ph3 + ") AND user_id=$" + (ids.length + 1), [...ids, userId])).rows;
+              if (estRows.length > 0) {
+                const eventMap: Record<string, string> = { sent: "estimate.sent", won: "estimate.won", scheduled: "job.scheduled", "in-progress": "job.in_progress", completed: "job.completed" };
+                if (eventMap[status]) {
+                  for (const est of estRows) {
+                    await fireWebhook(pool, userId, eventMap[status], {
+                      id: est.id, project_name: est.project_name, customer_name: est.customer_name,
+                      trade: est.trade, status: est.status, start_date: est.start_date, end_date: est.end_date,
+                    });
+                  }
+                }
+                if (status === "scheduled") {
+                  const syncRes = await autoSyncScheduled(pool, userId, estRows.map((r: any) => r.id));
+                  if (syncRes?.synced > 0) console.log(`[calendar] auto-synced ${syncRes.synced} job(s) to Google Calendar`);
+                }
+              }
+            } catch (hookErr: any) { console.error("[hooks] status-change webhook/calendar failed:", hookErr?.message || hookErr); }
             result = { success: true, updated: ids.length };
             break;
           }
@@ -702,6 +890,21 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
               [userId, from, to]
             )).rows;
             result = { jobs: ests, visits };
+            break;
+          }
+          case "scheduling.setJobDates": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const dj = args?.data || {};
+            if (!dj.estimateId) { res.statusCode = 400; res.end(JSON.stringify({ error: "Missing estimateId" })); return; }
+            await pool.query("UPDATE estimates SET start_date = $1, end_date = $2, updated_at = NOW() WHERE id = $3 AND user_id = $4", [dj.startDate || "", dj.endDate || "", dj.estimateId, userId]);
+            // Fire job.scheduled webhook when dates are assigned
+            try {
+              const est = (await pool.query("SELECT id, project_name, customer_name, trade, status, start_date, end_date FROM estimates WHERE id = $1 AND user_id = $2", [dj.estimateId, userId])).rows[0];
+              if (est) {
+                await fireWebhook(pool, userId, "job.scheduled", { id: est.id, project_name: est.project_name, customer_name: est.customer_name, trade: est.trade, status: est.status, start_date: est.start_date, end_date: est.end_date });
+              }
+            } catch (e2: any) { console.error("[webhooks] job.scheduled fire failed:", e2?.message || e2); }
+            result = { success: true };
             break;
           }
           // === team ===
@@ -1240,6 +1443,18 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             if (d14.status === "paid") { updates.push("paid_at = NOW()"); }
             vals.push(d14.id, userId);
             await pool.query("UPDATE invoices SET " + updates.join(", ") + " WHERE id = $2 AND user_id = $3", vals);
+            // Fire invoice.paid webhook
+            if (d14.status === "paid") {
+              try {
+                const inv = (await pool.query("SELECT i.*, e.project_name, e.customer_name FROM invoices i LEFT JOIN estimates e ON e.id = i.estimate_id WHERE i.id = $1 AND i.user_id = $2", [d14.id, userId])).rows[0];
+                if (inv) {
+                  await fireWebhook(pool, userId, "invoice.paid", {
+                    id: inv.id, invoice_number: inv.invoice_number, total: inv.total, status: inv.status,
+                    paid_at: inv.paid_at || new Date().toISOString(), project_name: inv.project_name, customer_name: inv.customer_name,
+                  });
+                }
+              } catch (whErr: any) { console.error("[webhooks] invoice.paid fire failed:", whErr?.message || whErr); }
+            }
             result = { success: true };
             break;
           }
@@ -1343,6 +1558,14 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
               "INSERT INTO invoice_reminders (id, invoice_id, sent_by, sent_to, status) VALUES ($1,$2,$3,$4,'sent')",
               [reminderId, dr.id, userId, inv.customer_name || ""]
             );
+            // SMS invoice-due reminder to the customer
+            try {
+              const phone = await findCustomerPhone(pool, userId, inv.customer_name || "");
+              if (phone) {
+                const dueDate = inv.due_date ? new Date(inv.due_date).toISOString().slice(0, 10) : "";
+                await sendSms(pool, userId, { to: phone, type: "invoice_due", vars: { invoiceId: inv.invoice_number, amount: "$" + Number(inv.total || 0).toFixed(2), date: dueDate, link: "", businessName: "" } });
+              }
+            } catch (smsErr: any) { console.error("[sms] invoice reminder failed:", smsErr?.message || smsErr); }
             result = { success: true, reminderId };
             break;
           }
@@ -1700,6 +1923,233 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             const vrow = (await pool.query("SELECT * FROM estimate_versions WHERE id=$1", [dGvs.versionId])).rows[0];
             if (!vrow) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; }
             result = { version: vrow };
+            break;
+          }
+          case "estimates.compareVersions": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            const dCmp = args?.data || {};
+            if (!dCmp.estimateId || !dCmp.versionAId || !dCmp.versionBId) { res.statusCode = 400; res.end(JSON.stringify({ error: "estimateId, versionAId and versionBId are required" })); return; }
+            const estOwn = (await pool.query("SELECT id FROM estimates WHERE id=$1 AND user_id=$2", [dCmp.estimateId, userId])).rows[0];
+            if (!estOwn) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; }
+            const [rA, rB] = (await Promise.all([
+              pool.query("SELECT * FROM estimate_versions WHERE id=$1 AND estimate_id=$2", [dCmp.versionAId, dCmp.estimateId]),
+              pool.query("SELECT * FROM estimate_versions WHERE id=$1 AND estimate_id=$2", [dCmp.versionBId, dCmp.estimateId]),
+            ])).map(r => r.rows[0]);
+            if (!rA || !rB) { res.statusCode = 404; res.end(JSON.stringify({ error: "Version not found" })); return; }
+            let snapA: any = { estimate: {}, lineItems: [] }, snapB: any = { estimate: {}, lineItems: [] };
+            try { snapA = JSON.parse(rA.snapshot); } catch {}
+            try { snapB = JSON.parse(rB.snapshot); } catch {}
+            const itemsA: any[] = snapA.lineItems || [];
+            const itemsB: any[] = snapB.lineItems || [];
+            const r2 = (n: number) => Math.round(n * 100) / 100;
+            const itemTotal = (it: any) => (Number(it.quantity) || 0) * (Number(it.unit_cost) || 0) * (1 + (Number(it.markup_percent) || 0) / 100);
+            const keyOf = (it: any) => String(it.id || "") + "|" + String(it.description || "").trim().toLowerCase();
+            const totalA = itemsA.reduce((s: number, it: any) => s + itemTotal(it), 0);
+            const totalB = itemsB.reduce((s: number, it: any) => s + itemTotal(it), 0);
+            const mapB = new Map(itemsB.map((it: any) => [keyOf(it), it]));
+            const rows: any[] = [];
+            const seenB = new Set<string>();
+            const numericDiff = (a: any, b: any) => Math.abs(Number(a || 0) - Number(b || 0)) > 0.001;
+            for (const itA of itemsA) {
+              const k = keyOf(itA);
+              const itB = mapB.get(k);
+              if (itB) {
+                seenB.add(k);
+                const fields: string[] = [];
+                if (numericDiff(itA.quantity, itB.quantity)) fields.push("quantity");
+                if (String(itA.unit || "") !== String(itB.unit || "")) fields.push("unit");
+                if (numericDiff(itA.unit_cost, itB.unit_cost)) fields.push("unit_cost");
+                if (numericDiff(itA.markup_percent, itB.markup_percent)) fields.push("markup_percent");
+                rows.push({ description: itA.description, change: fields.length ? "changed" : "unchanged", fields, a: itA, b: itB, totalA: r2(itemTotal(itA)), totalB: r2(itemTotal(itB)) });
+              } else {
+                rows.push({ description: itA.description, change: "removed", fields: [], a: itA, b: null, totalA: r2(itemTotal(itA)), totalB: 0 });
+              }
+            }
+            for (const itB of itemsB) {
+              if (!seenB.has(keyOf(itB))) rows.push({ description: itB.description, change: "added", fields: [], a: null, b: itB, totalA: 0, totalB: r2(itemTotal(itB)) });
+            }
+            const estFields = ["project_name", "customer_name", "trade", "status", "tax_rate", "notes"];
+            const estChanges = estFields
+              .filter((f) => String(snapA.estimate?.[f] ?? "") !== String(snapB.estimate?.[f] ?? ""))
+              .map((f) => ({ field: f, a: snapA.estimate?.[f] ?? "", b: snapB.estimate?.[f] ?? "" }));
+            result = {
+              versionA: { number: rA.version_number, createdAt: rA.created_at },
+              versionB: { number: rB.version_number, createdAt: rB.created_at },
+              summary: {
+                added: rows.filter((r: any) => r.change === "added").length,
+                removed: rows.filter((r: any) => r.change === "removed").length,
+                changed: rows.filter((r: any) => r.change === "changed").length,
+                totalA: r2(totalA), totalB: r2(totalB), delta: r2(totalB - totalA),
+              },
+              rows, estChanges,
+            };
+            break;
+          }
+          case "rfqs.list": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await listRfqs(args, userId, pool);
+            break;
+          }
+          case "rfqs.get": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getRfq(args, userId, pool);
+            break;
+          }
+          case "rfqs.create": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await createRfq(args, userId, pool);
+            break;
+          }
+          case "rfqs.updateStatus": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await updateRfqStatus(args, userId, pool);
+            break;
+          }
+          case "rfqs.addQuote": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await addQuote(args, userId, pool);
+            break;
+          }
+          case "rfqs.updateQuoteStatus": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await updateQuoteStatus(args, userId, pool);
+            break;
+          }
+          case "rfqs.deleteQuote": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await deleteQuote(args, userId, pool);
+            break;
+          }
+          case "rfqs.compare": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await compareQuotes(args, userId, pool);
+            break;
+          }
+          case "takeoffs.list": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await listTakeoffs(args, userId, pool);
+            break;
+          }
+          case "takeoffs.get": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getTakeoff(args, userId, pool);
+            break;
+          }
+          case "takeoffs.create": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await createTakeoff(args, userId, pool);
+            break;
+          }
+          case "takeoffs.setScale": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await setScale(args, userId, pool);
+            break;
+          }
+          case "takeoffs.addMeasurement": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await addMeasurement(args, userId, pool);
+            break;
+          }
+          case "takeoffs.deleteMeasurement": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await deleteMeasurement(args, userId, pool);
+            break;
+          }
+          case "takeoffs.delete": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await deleteTakeoff(args, userId, pool);
+            break;
+          }
+          case "branding.get": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getBranding(args, userId, pool);
+            break;
+          }
+          case "branding.save": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await saveBranding(args, userId, pool);
+            break;
+          }
+          // === google calendar ===
+          case "calendar.getStatus": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getCalendarStatus(args, userId, pool);
+            break;
+          }
+          case "calendar.getAuthUrl": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getCalendarAuthUrl(args, userId, pool);
+            break;
+          }
+          case "calendar.disconnect": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await disconnectCalendar(args, userId, pool);
+            break;
+          }
+          case "calendar.getEvents": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getCalendarEvents(args, userId, pool);
+            break;
+          }
+          case "calendar.createEvent": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await createCalendarEvent(args, userId, pool);
+            break;
+          }
+          case "calendar.deleteEvent": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await deleteCalendarEvent(args, userId, pool);
+            break;
+          }
+          // === webhook hub / api keys ===
+          case "webhooks.listApiKeys": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await listApiKeys(args, userId, pool);
+            break;
+          }
+          case "webhooks.createApiKey": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await createApiKey(args, userId, pool);
+            break;
+          }
+          case "webhooks.revokeApiKey": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await revokeApiKey(args, userId, pool);
+            break;
+          }
+          case "webhooks.listEndpoints": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await listWebhooks(args, userId, pool);
+            break;
+          }
+          case "webhooks.createEndpoint": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await createWebhook(args, userId, pool);
+            break;
+          }
+          case "webhooks.updateEndpoint": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await updateWebhook(args, userId, pool);
+            break;
+          }
+          case "webhooks.deleteEndpoint": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await deleteWebhook(args, userId, pool);
+            break;
+          }
+          case "webhooks.testFire": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await testFireWebhook(args, userId, pool);
+            break;
+          }
+          case "webhooks.getLogs": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getWebhookLogs(args, userId, pool);
+            break;
+          }
+          case "webhooks.getManifest": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getZapierManifest(args, userId, pool);
             break;
           }
           case "markups.listPresets": {
@@ -2262,6 +2712,104 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             if (!est) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; }
             await pool.query("UPDATE estimates SET signature_data=$1, signed_at=NOW(), status=CASE WHEN status='draft' THEN 'sent' ELSE status END WHERE id=$2", [dse.signatureData, dse.estimateId]);
             result = { success: true };
+            break;
+          }
+          // === SMS notifications ===
+          case "sms.getSettings": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getSmsSettings(pool, userId);
+            break;
+          }
+          case "sms.saveSettings": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await saveSmsSettings(pool, userId, !!args?.data?.enabled);
+            break;
+          }
+          case "sms.send": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await sendSms(pool, userId, args?.data || {});
+            break;
+          }
+          case "sms.sendTest": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await sendSms(pool, userId, { to: args?.data?.phone || "", type: "test", vars: args?.data?.vars || { businessName: "" } });
+            break;
+          }
+          case "sms.getLogs": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = { logs: await getSmsLogs(pool, userId, args?.data?.limit || 50) };
+            break;
+          }
+          // === Reporting dashboard ===
+          case "reports.filters": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getReportFilters(pool, userId, args?.data || {});
+            break;
+          }
+          case "reports.profitability": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getProfitability(pool, userId, args?.data || {});
+            break;
+          }
+          case "reports.winLoss": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getWinLoss(pool, userId, args?.data || {});
+            break;
+          }
+          case "reports.estimatorPerformance": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getEstimatorPerformance(pool, userId, args?.data || {});
+            break;
+          }
+          case "reports.revenueTrends": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getRevenueTrends(pool, userId, args?.data || {});
+            break;
+          }
+          case "reports.costBreakdown": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getCostBreakdown(pool, userId, args?.data || {});
+            break;
+          }
+          // === Template marketplace ===
+          case "templates.publish": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await publishListing(pool, userId, args?.data || {});
+            break;
+          }
+          case "templates.unpublish": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await unpublishListing(pool, userId, args?.data || {});
+            break;
+          }
+          case "templates.getMyListings": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getMyListings(pool, userId, args?.data || {});
+            break;
+          }
+          case "templates.search": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await searchListings(pool, userId, args?.data || {});
+            break;
+          }
+          case "templates.getListing": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getListingDetail(pool, userId, args?.data || {});
+            break;
+          }
+          case "templates.checkout": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await checkoutListing(pool, userId, args?.data || {});
+            break;
+          }
+          case "templates.install": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await installListing(pool, userId, args?.data || {});
+            break;
+          }
+          case "templates.rate": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await rateListing(pool, userId, args?.data || {});
             break;
           }
           default: { res.statusCode = 501; res.end(JSON.stringify({ error: "Unknown: " + fnName })); return; }

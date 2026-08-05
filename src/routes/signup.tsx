@@ -36,7 +36,7 @@ function SignupPage() {
       });
       const data = await res.json();
       if (data.success) {
-        router.navigate({ to: "/dashboard" });
+        router.navigate({ to: "/onboarding" });
       } else {
         setError(data.error || "Signup failed");
       }
