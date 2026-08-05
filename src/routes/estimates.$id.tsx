@@ -503,6 +503,22 @@ return (
           <button onClick={() => setShowSaveTemplate(true)} className="rounded-lg border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950">
             Save as Template
           </button>
+          <button onClick={async () => {
+            try {
+              const r = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "quickbooks.exportToQuickBooks", args: { data: { estimateId: id } } }), credentials: "include" });
+              const d = await r.json();
+              if (d.error) throw new Error(d.error);
+              alert("Exported to QuickBooks! Invoice ID: " + d.invoiceId);
+            } catch(e: any) { alert("Export failed: " + e.message); }
+          }} className="rounded-lg border border-green-300 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-950">
+            Export to QuickBooks
+          </button>
+          <a href={`/api/export/estimate?id=${id}&format=csv`} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+            Export CSV
+          </a>
+          <a href={`/api/export/estimate?id=${id}&format=xlsx`} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">
+            Export Excel
+          </a>
           <button onClick={() => setShowProposalForm(!showProposalForm)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
             Generate Proposal
           </button>
