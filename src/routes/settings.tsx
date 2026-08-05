@@ -10,6 +10,10 @@ function SettingsPage() {
   const [pushSubs, setPushSubs] = useState<any[]>([]);
   const [builderPlatforms, setBuilderPlatforms] = useState<any[]>([]);
   const [qbo, setQbo] = useState<any>({ connected: false });
+  const [sms, setSms] = useState<any>({ enabled: true, mode: "dry-run", templates: [] });
+  const [smsLogs, setSmsLogs] = useState<any[]>([]);
+  const [smsTestPhone, setSmsTestPhone] = useState("");
+  const [smsStatus, setSmsStatus] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -21,14 +25,18 @@ function SettingsPage() {
         if (!meData.user) { window.location.href = "/login"; return; }
         setUser(meData.user);
         const fetchApi = (fn: string, args: any = {}) => fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: fn, args }), credentials: "include" }).then(r => r.json());
-        const [subData, pushData, platData] = await Promise.all([
+        const [subData, pushData, platData, smsSettings, smsLogData] = await Promise.all([
           fetchApi("subscriptions.getSubscriptionStatus").catch(() => ({ tier: "trial" })),
           fetchApi("push.getSubscriptions").catch(() => []),
           fetchApi("integrations.getConnectedPlatforms").catch(() => []),
+          fetchApi("sms.getSettings").catch(() => null),
+          fetchApi("sms.getLogs", { data: { limit: 20 } }).catch(() => null),
         ]);
         setSub(subData);
         setPushSubs(pushData);
         setBuilderPlatforms(platData);
+        if (smsSettings) setSms(smsSettings);
+        if (smsLogData?.logs) setSmsLogs(smsLogData.logs);
       } catch (e: any) { setError(e.message); }
       finally { setLoading(false); }
     })();
@@ -63,6 +71,68 @@ function SettingsPage() {
           {pushSubs.length > 0 ? (
             <div className="mt-4 space-y-2">{pushSubs.map((s: any) => <div key={s.id} className="flex items-center justify-between rounded-lg bg-gray-50 p-3 dark:bg-gray-950"><span className="text-sm truncate max-w-xs">{s.endpoint?.substring(0,60)}...</span><button onClick={() => fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "push.removeSubscription", args: { data: { endpoint: s.endpoint } } }), credentials: "include" }).then(() => setPushSubs(pushSubs.filter(x => x.endpoint !== s.endpoint)))} className="text-sm text-red-600 hover:underline">Remove</button></div>)}</div>
           ) : <p className="mt-4 text-sm text-gray-400">No push subscriptions</p>}
+        </section>
+
+        <section className="mt-6 rounded-xl border border-gray-200 p-6 dark:border-gray-800">
+          <h2 className="text-lg font-semibold">SMS Notifications</h2>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            Text alerts sent to customers for proposals, invoices, and appointments.
+            {sms.mode === "dry-run" ? (
+              <span className="mt-2 block rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">
+                Dry-run mode — no real texts are sent. Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM_NUMBER env vars to activate live delivery.
+              </span>
+            ) : (
+              <span className="mt-2 block rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
+                Live mode — texts are delivered via Twilio.
+              </span>
+            )}
+          </p>
+          <div className="mt-4 flex items-center gap-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={sms.enabled !== false} onChange={async (e) => { const res = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "sms.saveSettings", args: { data: { enabled: e.target.checked } } }), credentials: "include" }).then(r => r.json()); if (res.success) setSms({ ...sms, enabled: e.target.checked }); }} className="h-4 w-4 rounded border-gray-300 text-indigo-600" />
+              Enable SMS notifications
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <div className="min-w-[220px] flex-1">
+              <label className="text-xs font-medium text-gray-500">Test phone number</label>
+              <input value={smsTestPhone} onChange={(e) => setSmsTestPhone(e.target.value)} placeholder="(555) 123-4567" className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900" />
+            </div>
+            <button onClick={async () => { if (!smsTestPhone.trim()) return; setSmsStatus("Sending…"); const res = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "sms.sendTest", args: { data: { phone: smsTestPhone } } }), credentials: "include" }).then(r => r.json()); setSmsStatus(res.status === "sent" ? "✓ Delivered" : res.status === "dry_run" ? "Logged (dry-run) — no real text sent" : res.skipped || "Failed"); const logs = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "sms.getLogs", args: { data: { limit: 20 } } }), credentials: "include" }).then(r => r.json()); if (logs.logs) setSmsLogs(logs.logs); }} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50" disabled={!smsTestPhone.trim()}>Send Test</button>
+          </div>
+          {smsStatus && <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{smsStatus}</p>}
+          <div className="mt-6">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Message Templates</h3>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {(sms.templates || []).map((t: any) => (
+                <div key={t.type} className="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                  <p className="text-sm font-medium">{t.label}</p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{t.description}</p>
+                  <p className="mt-2 rounded bg-gray-50 p-2 text-xs text-gray-600 dark:bg-gray-950 dark:text-gray-400">{t.example}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="mt-6">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Recent SMS Activity</h3>
+            {smsLogs.length > 0 ? (
+              <div className="mt-3 overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-50 text-xs uppercase text-gray-500 dark:bg-gray-950 dark:text-gray-400"><tr><th className="px-3 py-2">Status</th><th className="px-3 py-2">To</th><th className="px-3 py-2">Message</th><th className="px-3 py-2">Time</th></tr></thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-900">
+                    {smsLogs.map((l: any) => (
+                      <tr key={l.id}>
+                        <td className="px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${l.status === "sent" ? "bg-emerald-50 text-emerald-700" : l.status === "dry_run" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"} dark:bg-opacity-20`}>{l.status}</span></td>
+                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{l.to_phone}</td>
+                        <td className="max-w-[260px] truncate px-3 py-2 text-gray-600 dark:text-gray-400">{l.message}</td>
+                        <td className="px-3 py-2 text-gray-500">{new Date(l.created_at).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : <p className="mt-3 text-sm text-gray-400">No SMS activity yet</p>}
+          </div>
         </section>
 
         <section className="mt-6 rounded-xl border border-gray-200 p-6 dark:border-gray-800">

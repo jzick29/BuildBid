@@ -388,6 +388,28 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
       }
       return;
     }
+    if (req.method === "POST" && url === "/api/sms/send") {
+      try {
+        const smsBody = await readBody(req);
+        const smsCookies = parseCookies(req);
+        const smsToken = smsCookies["buildbid_session"];
+        if (!smsToken) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+        const smsPool = getPool();
+        const smsAuth = await smsPool.query("SELECT u.id, u.frozen FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [smsToken]);
+        if (!smsAuth.rows[0]) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+        if (smsAuth.rows[0].frozen === 1) { res.statusCode = 403; res.end(JSON.stringify({ error: "Account frozen. Contact support." })); return; }
+        const smsUserId = smsAuth.rows[0].id;
+        const smsInput = smsBody || {};
+        const smsResult = await sendSms(smsPool, smsUserId, { to: smsInput.to, type: smsInput.type, message: smsInput.message, vars: smsInput.vars });
+        res.statusCode = smsResult.success ? 200 : 400;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(smsResult));
+      } catch (e: any) {
+        console.error("[sms/send] Error:", e?.message || e);
+        res.statusCode = 500; res.end(JSON.stringify({ error: "SMS send failed" }));
+      }
+      return;
+    }
     // /api/call
     if (req.method === "POST" && url === "/api/call") {
       const body = await readBody(req);
@@ -671,6 +693,19 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             const sql = "UPDATE estimates SET status=$1, updated_at=NOW() WHERE id IN (" + placeholders + ") AND user_id=$" + (ids.length+2);
             await pool.query(sql,
               [status, ...ids, userId]);
+            // SMS alert when a proposal is accepted (won)
+            if (status === "won") {
+              try {
+                const ph2 = ids.map((_: any, i: number) => "$" + (i + 1)).join(",");
+                const estRows = (await pool.query("SELECT id, customer_name, project_name FROM estimates WHERE id IN (" + ph2 + ") AND user_id=$" + (ids.length + 1), [...ids, userId])).rows;
+                for (const est of estRows) {
+                  const phone = await findCustomerPhone(pool, userId, est.customer_name || "");
+                  if (phone) {
+                    await sendSms(pool, userId, { to: phone, type: "estimate_won", vars: { projectName: est.project_name || "", businessName: "", date: "" } });
+                  }
+                }
+              } catch (smsErr: any) { console.error("[sms] estimate won alert failed:", smsErr?.message || smsErr); }
+            }
             result = { success: true, updated: ids.length };
             break;
           }
@@ -1348,6 +1383,14 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
               "INSERT INTO invoice_reminders (id, invoice_id, sent_by, sent_to, status) VALUES ($1,$2,$3,$4,'sent')",
               [reminderId, dr.id, userId, inv.customer_name || ""]
             );
+            // SMS invoice-due reminder to the customer
+            try {
+              const phone = await findCustomerPhone(pool, userId, inv.customer_name || "");
+              if (phone) {
+                const dueDate = inv.due_date ? new Date(inv.due_date).toISOString().slice(0, 10) : "";
+                await sendSms(pool, userId, { to: phone, type: "invoice_due", vars: { invoiceId: inv.invoice_number, amount: "$" + Number(inv.total || 0).toFixed(2), date: dueDate, link: "", businessName: "" } });
+              }
+            } catch (smsErr: any) { console.error("[sms] invoice reminder failed:", smsErr?.message || smsErr); }
             result = { success: true, reminderId };
             break;
           }
@@ -2267,6 +2310,37 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             if (!est) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; }
             await pool.query("UPDATE estimates SET signature_data=$1, signed_at=NOW(), status=CASE WHEN status='draft' THEN 'sent' ELSE status END WHERE id=$2", [dse.signatureData, dse.estimateId]);
             result = { success: true };
+            break;
+          }
+          // === SMS notifications ===
+          case "sms.getSettings": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await getSmsSettings(pool, userId);
+            break;
+          }
+          case "sms.saveSettings": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await saveSmsSettings(pool, userId, !!args?.data?.enabled);
+            break;
+          }
+          case "sms.send": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await sendSms(pool, userId, args?.data || {});
+            break;
+          }
+          case "sms.sendTest": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = await sendSms(pool, userId, { to: args?.data?.phone || "", type: "test", vars: args?.data?.vars || { businessName: "" } });
+            break;
+          }
+          case "sms.getLogs": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = { logs: await getSmsLogs(pool, userId, args?.data?.limit || 50) };
+            break;
+          }
+          case "sms.adminGetLogs": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            result = { logs: await getAdminSmsLogs(pool, userId, args?.data?.limit || 100) };
             break;
           }
           default: { res.statusCode = 501; res.end(JSON.stringify({ error: "Unknown: " + fnName })); return; }
