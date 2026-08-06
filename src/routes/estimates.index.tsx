@@ -262,7 +262,7 @@ function EstimatesIndex() {
             </div>
           )}
 
-          <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800">
+          <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
             <table className="w-full text-left text-sm">
               <thead className="bg-gray-50 dark:bg-gray-950">
                 <tr>
