@@ -52,6 +52,23 @@ function readRawBody(req: IncomingMessage): Promise<string> {
   return new Promise(r => { let d = ""; req.on("data", (ch: string) => d += ch); req.on("end", () => r(d)); });
 }
 
+// Recomputes an estimate's grand_total from its line items: SUM((qty * unit_cost) * (1 + markup/100)).
+// Mirrors the `total` subquery used in listEstimates/dashboard/revenue (tax is applied at display time, not stored).
+// Self-heals the column (added by PR #28) in case it hasn't been migrated on this DB yet.
+async function recomputeGrandTotal(pool: any, estimateId: string): Promise<number> {
+  try { await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS grand_total REAL NOT NULL DEFAULT 0"); } catch {}
+  const r = await pool.query("UPDATE estimates SET grand_total = COALESCE((SELECT SUM((li.quantity * li.unit_cost) * (1 + COALESCE(li.markup_percent, 0) / 100.0)) FROM line_items li WHERE li.estimate_id = estimates.id), 0), updated_at = NOW() WHERE id = $1 RETURNING grand_total", [estimateId]);
+  return Number(r.rows?.[0]?.grand_total) || 0;
+}
+
+// Lazily backfills grand_total for estimates created before the column existed. Idempotent; does not touch updated_at.
+async function backfillGrandTotals(pool: any): Promise<void> {
+  try {
+    await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS grand_total REAL NOT NULL DEFAULT 0");
+    await pool.query("UPDATE estimates SET grand_total = COALESCE((SELECT SUM((li.quantity * li.unit_cost) * (1 + COALESCE(li.markup_percent, 0) / 100.0)) FROM line_items li WHERE li.estimate_id = estimates.id), 0) WHERE grand_total = 0 AND EXISTS (SELECT 1 FROM line_items li WHERE li.estimate_id = estimates.id)");
+  } catch {}
+}
+
 async function handleSignup(body: any) {
   const { email, password, name, company, source } = body || {};
   if (!email || !password) return new Response(JSON.stringify({ error: "Missing fields" }), { status: 400, headers: { "Content-Type": "application/json" } });
@@ -612,7 +629,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             }
             result = { templates: rows }; break; }
           case "templates.getTemplate": { const tpl = (await pool.query("SELECT * FROM templates WHERE id=$1", [args?.data?.id])).rows[0]; if (!tpl) { res.statusCode = 404; res.end(JSON.stringify({ error: "Not found" })); return; } const items = (await pool.query("SELECT * FROM template_line_items WHERE template_id=$1 ORDER BY sort_order", [args?.data?.id])).rows; result = { template: tpl, items }; break; }
-          case "templates.createEstimateFromTemplate": { if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; } const d = args?.data || {}; if (!d.templateId || !d.projectName?.trim() || !d.customerName?.trim()) { res.statusCode = 400; res.end(JSON.stringify({ error: "Missing fields" })); return; } const tpl = (await pool.query("SELECT * FROM templates WHERE id=$1", [d.templateId])).rows[0]; if (!tpl) { res.statusCode = 404; res.end(JSON.stringify({ error: "Template not found" })); return; } const items = (await pool.query("SELECT * FROM template_line_items WHERE template_id=$1 ORDER BY sort_order", [d.templateId])).rows; const eid = crypto.randomUUID(); await pool.query("INSERT INTO estimates (id, user_id, project_name, customer_name, trade) VALUES ($1,$2,$3,$4,$5)", [eid, userId, d.projectName.trim(), d.customerName.trim(), tpl.trade_type]); for (const it of items) { await pool.query("INSERT INTO line_items (id, estimate_id, description, quantity, unit, unit_cost, markup_percent, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,(SELECT COALESCE(MAX(sort_order),0)+1 FROM line_items WHERE estimate_id=$2))", [crypto.randomUUID(), eid, it.description, it.quantity, it.unit, it.unit_cost, it.markup_percent]); } result = { id: eid }; break; }
+          case "templates.createEstimateFromTemplate": { if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; } const d = args?.data || {}; if (!d.templateId || !d.projectName?.trim() || !d.customerName?.trim()) { res.statusCode = 400; res.end(JSON.stringify({ error: "Missing fields" })); return; } const tpl = (await pool.query("SELECT * FROM templates WHERE id=$1", [d.templateId])).rows[0]; if (!tpl) { res.statusCode = 404; res.end(JSON.stringify({ error: "Template not found" })); return; } const items = (await pool.query("SELECT * FROM template_line_items WHERE template_id=$1 ORDER BY sort_order", [d.templateId])).rows; const eid = crypto.randomUUID(); await pool.query("INSERT INTO estimates (id, user_id, project_name, customer_name, trade) VALUES ($1,$2,$3,$4,$5)", [eid, userId, d.projectName.trim(), d.customerName.trim(), tpl.trade_type]); for (const it of items) { await pool.query("INSERT INTO line_items (id, estimate_id, description, quantity, unit, unit_cost, markup_percent, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,(SELECT COALESCE(MAX(sort_order),0)+1 FROM line_items WHERE estimate_id=$2))", [crypto.randomUUID(), eid, it.description, it.quantity, it.unit, it.unit_cost, it.markup_percent]); } const gtTpl = await recomputeGrandTotal(pool, eid); result = { id: eid, grand_total: gtTpl }; break; }
           case "templates.seedTemplates": { if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; } const adminCheck = await pool.query("SELECT role FROM users WHERE id=$1", [userId]); if (adminCheck.rows[0]?.role !== "admin") { res.statusCode = 403; res.end(JSON.stringify({ error: "Admin required" })); return; } const newTemplates = args?.data?.templates; if (!newTemplates || !Array.isArray(newTemplates)) { res.statusCode = 400; res.end(JSON.stringify({ error: "Provide templates array" })); return; } let seeded = 0; for (const t of newTemplates) { const exist = await pool.query("SELECT id FROM templates WHERE name=$1 LIMIT 1", [t.name]); if (exist.rows.length > 0) continue; const tid = crypto.randomUUID(); await pool.query("INSERT INTO templates (id, name, trade_type, description) VALUES ($1,$2,$3,$4)", [tid, t.name, t.trade_type, t.description]); for (let i = 0; i < t.items.length; i++) { const it = t.items[i]; await pool.query("INSERT INTO template_line_items (id, template_id, description, quantity, unit, unit_cost, markup_percent, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)", [crypto.randomUUID(), tid, it.description, it.quantity, it.unit, it.unit_cost, it.markup_percent, i]); } seeded++; } result = { seeded, total: newTemplates.length }; break; }
           // === custom templates ===
           case "templates.saveCustomTemplate": {
@@ -794,6 +811,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
           case "analytics.getDashboardStats": case "analytics.getAnalytics": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             try { await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS grand_total REAL NOT NULL DEFAULT 0"); } catch {}
+            await backfillGrandTotals(pool);
             const [stats, rev, trade, recent, pipeline] = await Promise.all([
               pool.query("SELECT COUNT(*) as total, SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) as won, SUM(CASE WHEN status='lost' THEN 1 ELSE 0 END) as lost, COALESCE(SUM(CASE WHEN status='won' THEN (SELECT COALESCE(SUM((li.quantity * li.unit_cost) * (1 + li.markup_percent / 100.0)), 0) FROM line_items li WHERE li.estimate_id = estimates.id) ELSE 0 END), 0) as total_revenue, COALESCE(AVG(CASE WHEN status='won' THEN (SELECT COALESCE(AVG(markup_percent), 0) FROM line_items li WHERE li.estimate_id = estimates.id) END), 0) as avg_markup FROM estimates WHERE user_id=$1", [userId]),
               pool.query("SELECT DATE_TRUNC('month', created_at) as month, SUM(grand_total) as revenue FROM estimates WHERE status='won' AND user_id=$1 GROUP BY month ORDER BY month", [userId]),
@@ -817,6 +835,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
           case "analytics.getRevenueTrend": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             try { await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS grand_total REAL NOT NULL DEFAULT 0"); } catch {}
+            await backfillGrandTotals(pool);
             const rows = (await pool.query("SELECT DATE_TRUNC('month', created_at) as month, SUM(grand_total) as revenue FROM estimates WHERE status='won' AND user_id=$1 GROUP BY month ORDER BY month", [userId])).rows;
             result = rows;
             break;
@@ -846,7 +865,8 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             await pool.query("INSERT INTO estimates (id, user_id, project_name, customer_name, trade, status) VALUES ($1,$2,$3,$4,$5,'draft')",
               [eid, userId, d.projectName.trim(), d.customerName.trim(), d.trade || "general"]);
             void trackEvent(pool, userId, "estimate_created", { estimate_id: eid, project_name: d.projectName.trim(), customer_name: d.customerName.trim(), trade: d.trade || "general" });
-            result = { id: eid };
+            const gtNew = await recomputeGrandTotal(pool, eid);
+            result = { id: eid, grand_total: gtNew };
             break;
           }
           case "estimates.deleteEstimate": {
@@ -1020,7 +1040,8 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
                 [crypto.randomUUID(), aiEid, `Labor - ${aiTrade} (AI estimate)`, aiLaborHours, "hour", Number(aiD.laborRate) || 85, 0, aiSort++]);
             }
             void trackEvent(pool, userId, "ai_estimate_created", { estimate_id: aiEid, project_name: String(aiD.projectName).trim(), customer_name: String(aiD.customerName).trim(), trade: aiTrade, line_items: aiItems.length });
-            result = { id: aiEid };
+            const gtAi = await recomputeGrandTotal(pool, aiEid);
+            result = { id: aiEid, grand_total: gtAi };
             break;
           }
           // === admin ===
@@ -1087,6 +1108,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             const as4 = await pool.query("SELECT role FROM users WHERE id = $1", [userId]);
             if (as4.rows[0]?.role !== "admin") { res.statusCode = 403; res.end(JSON.stringify({ error: "Admin required" })); return; }
             try { await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS grand_total REAL NOT NULL DEFAULT 0"); } catch {}
+            await backfillGrandTotals(pool);
             const [uc, ec, rc, icc] = await Promise.all([
               pool.query("SELECT COUNT(*)::int as cnt FROM users"),
               pool.query("SELECT COUNT(*)::int as cnt, COALESCE(SUM(grand_total),0) as total_value FROM estimates"),
@@ -1935,14 +1957,17 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             const nextOrder = (await pool.query("SELECT COALESCE(MAX(sort_order), -1) + 1 as next FROM line_items WHERE estimate_id=$1", [d25.estimateId])).rows[0].next;
             await pool.query("INSERT INTO line_items (id, estimate_id, description, quantity, unit, unit_cost, markup_percent, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
               [crypto.randomUUID(), d25.estimateId, d25.description.trim(), d25.quantity || 1, d25.unit || "each", d25.unitCost || 0, d25.markupPercent || 0, nextOrder]);
-            result = { success: true };
+            const gtAdd = await recomputeGrandTotal(pool, d25.estimateId);
+            result = { success: true, grand_total: gtAdd };
             break;
           }
           case "estimates.removeLineItem": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             const d26 = args?.data || {};
+            const li26 = (await pool.query("SELECT estimate_id FROM line_items WHERE id=$1", [d26.id])).rows[0];
             await pool.query("DELETE FROM line_items WHERE id=$1", [d26.id]);
-            result = { success: true };
+            const gtRem = li26 ? await recomputeGrandTotal(pool, li26.estimate_id) : 0;
+            result = { success: true, grand_total: gtRem };
             break;
           }
           case "estimates.bulkDelete": {
@@ -1978,8 +2003,10 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             const dLim = args?.data || {};
             if (!dLim.id || dLim.markupPercent === undefined) { res.statusCode = 400; res.end(JSON.stringify({ error: "Missing fields" })); return; }
+            const liMark = (await pool.query("SELECT estimate_id FROM line_items WHERE id=$1", [dLim.id])).rows[0];
             await pool.query("UPDATE line_items SET markup_percent=$1 WHERE id=$2", [parseFloat(dLim.markupPercent) || 0, dLim.id]);
-            result = { success: true };
+            const gtMark = liMark ? await recomputeGrandTotal(pool, liMark.estimate_id) : 0;
+            result = { success: true, grand_total: gtMark };
             break;
           }
           case "estimates.saveVersion": {
@@ -2292,16 +2319,20 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             const dLq = args?.data || {};
             if (!dLq.id || dLq.quantity === undefined) { res.statusCode = 400; res.end(JSON.stringify({ error: "Missing fields" })); return; }
+            const liQty = (await pool.query("SELECT estimate_id FROM line_items WHERE id=$1", [dLq.id])).rows[0];
             await pool.query("UPDATE line_items SET quantity=$1 WHERE id=$2", [parseFloat(dLq.quantity) || 1, dLq.id]);
-            result = { success: true };
+            const gtQty = liQty ? await recomputeGrandTotal(pool, liQty.estimate_id) : 0;
+            result = { success: true, grand_total: gtQty };
             break;
           }
           case "estimates.updateLineItemCost": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             const dLc = args?.data || {};
             if (!dLc.id || dLc.unitCost === undefined) { res.statusCode = 400; res.end(JSON.stringify({ error: "Missing fields" })); return; }
+            const liCost = (await pool.query("SELECT estimate_id FROM line_items WHERE id=$1", [dLc.id])).rows[0];
             await pool.query("UPDATE line_items SET unit_cost=$1 WHERE id=$2", [parseFloat(dLc.unitCost) || 0, dLc.id]);
-            result = { success: true };
+            const gtCost = liCost ? await recomputeGrandTotal(pool, liCost.estimate_id) : 0;
+            result = { success: true, grand_total: gtCost };
             break;
           }
           // === proposals ===
