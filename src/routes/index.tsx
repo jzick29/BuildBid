@@ -47,12 +47,13 @@ function Home() {
           <span className="text-xl font-bold tracking-tight text-indigo-600 dark:text-indigo-400">
             BuildBid
           </span>
-          <div className="flex items-center gap-6 text-sm font-medium text-gray-600 dark:text-gray-400">
+          <div className="hidden items-center gap-6 text-sm font-medium text-gray-600 dark:text-gray-400 sm:flex">
             <a href="#features" className="hover:text-gray-900 dark:hover:text-gray-100">Features</a>
             <a href="#pricing" className="hover:text-gray-900 dark:hover:text-gray-100">Pricing</a>
             <Link to="/blog" className="hover:text-gray-900 dark:hover:text-gray-100">Blog</Link>
             <Link to="/signup" className="rounded-lg bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-700">Get Started</Link>
           </div>
+          <Link to="/signup" className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 sm:hidden">Get Started</Link>
         </nav>
       </header>
 

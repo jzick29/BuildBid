@@ -92,10 +92,27 @@ async function handleMe(req: IncomingMessage) {
   const token = parseCookies(req)["buildbid_session"];
   if (!token) return new Response(JSON.stringify({ user: null }), { status: 200, headers: { "Content-Type": "application/json" } });
   const pool = getPool();
-  const r = await pool.query("SELECT u.id, u.email, u.name, u.frozen FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [token]);
+  const r = await pool.query("SELECT u.id, u.email, u.name, u.frozen, u.subscription_tier, u.trial_ends_at, u.role, COALESCE(u.onboarding_completed, 0)::int AS onboarding_completed, COALESCE(u.trade, '') AS trade, COALESCE(u.phone, '') AS phone FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [token]);
   if (!r.rows[0]) return new Response(JSON.stringify({ user: null }), { status: 200, headers: { "Content-Type": "application/json" } });
   if (r.rows[0].frozen === 1) return new Response(JSON.stringify({ user: null, error: "Account frozen. Contact support." }), { status: 403, headers: { "Content-Type": "application/json" } });
   return new Response(JSON.stringify({ user: r.rows[0] }), { status: 200, headers: { "Content-Type": "application/json" } });
+}
+async function handleOnboarding(req: IncomingMessage, body: any) {
+  const token = parseCookies(req)["buildbid_session"];
+  if (!token) return new Response(JSON.stringify({ success: false, error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
+  const pool = getPool();
+  const s = await pool.query("SELECT user_id FROM sessions WHERE id=$1 AND expires_at>NOW()", [token]);
+  if (!s.rows[0]) return new Response(JSON.stringify({ success: false, error: "Session expired" }), { status: 401, headers: { "Content-Type": "application/json" } });
+  const userId = s.rows[0].user_id;
+  const { trade, phone, company_name } = body || {};
+  if (!trade) return new Response(JSON.stringify({ success: false, error: "Trade is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
+  try {
+    await pool.query("UPDATE users SET trade=$1, phone=$2, name=COALESCE(NULLIF($3,''), name), onboarding_completed=1 WHERE id=$4", [trade, phone || "", company_name || "", userId]);
+    void trackEvent(pool, userId, "onboarding_completed", { trade, phone: phone || "", company_name: company_name || "" });
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json" } });
+  } catch (err: any) {
+    return new Response(JSON.stringify({ success: false, error: err.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+  }
 }
 async function handleLogout(req: IncomingMessage) {
   const token = parseCookies(req)["buildbid_session"];
@@ -169,6 +186,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
     if (req.method === "POST" && url === "/api/signup") { const wr = await handleSignup(await readBody(req)); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
     if (req.method === "POST" && url === "/api/login") { const wr = await handleLogin(await readBody(req)); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
     if (req.method === "GET" && url === "/api/me") { const wr = await handleMe(req); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
+    if (req.method === "POST" && url === "/api/onboarding") { const wr = await handleOnboarding(req, await readBody(req)); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
     if (req.method === "POST" && url === "/api/logout") { const wr = await handleLogout(req); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
     if (req.method === "POST" && url === "/api/seed-admin") {
       const pool = getPool();
