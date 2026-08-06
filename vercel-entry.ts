@@ -53,8 +53,9 @@ function readRawBody(req: IncomingMessage): Promise<string> {
 }
 
 async function handleSignup(body: any) {
-  const { email, password, name, source } = body || {};
+  const { email, password, name, company, source } = body || {};
   if (!email || !password) return new Response(JSON.stringify({ error: "Missing fields" }), { status: 400, headers: { "Content-Type": "application/json" } });
+  const displayName = String(name || company || "").trim();
   const pool = getPool();
   const exist = await pool.query("SELECT id FROM users WHERE email=$1", [email]);
   if (exist.rows[0]) return new Response(JSON.stringify({ error: "Email in use" }), { status: 409, headers: { "Content-Type": "application/json" } });
@@ -65,11 +66,11 @@ async function handleSignup(body: any) {
   const users = await pool.query("SELECT COUNT(*) as c FROM users");
   const role = parseInt(users.rows[0]?.c || "0") === 0 ? "admin" : "user";
   await pool.query("INSERT INTO users (id, email, password_hash, name, subscription_tier, trial_ends_at, role, source) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-    [id, email, hash, name || "", "trial", trialEndsAt, role, source || ""]);
+    [id, email, hash, displayName, "trial", trialEndsAt, role, source || ""]);
   const token = crypto.randomUUID();
   await pool.query("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1,$2,$3)", [token, id, new Date(Date.now() + 7 * 86400000).toISOString()]);
   void trackEvent(pool, id, "signup", { source: source || "" });
-  const resp = new Response(JSON.stringify({ success: true, user: { id, email, name } }), { status: 200, headers: { "Content-Type": "application/json" } });
+  const resp = new Response(JSON.stringify({ success: true, user: { id, email, name: displayName } }), { status: 200, headers: { "Content-Type": "application/json" } });
   resp.headers.append("Set-Cookie", `buildbid_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${7 * 86400}`);
   return resp;
 }
@@ -84,7 +85,8 @@ async function handleLogin(body: any) {
   const token = crypto.randomUUID();
   await pool.query("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1,$2,$3)", [token, r.rows[0].id, new Date(Date.now() + 7 * 86400000).toISOString()]);
   void trackEvent(pool, r.rows[0].id, "login");
-  const resp = new Response(JSON.stringify({ success: true, user: r.rows[0] }), { status: 200, headers: { "Content-Type": "application/json" } });
+  const { password_hash, ...safeUser } = r.rows[0];
+  const resp = new Response(JSON.stringify({ success: true, user: safeUser }), { status: 200, headers: { "Content-Type": "application/json" } });
   resp.headers.append("Set-Cookie", `buildbid_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${7 * 86400}`);
   return resp;
 }
@@ -579,6 +581,10 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
       try { clientUser = await getClientUser(req); } catch (e: any) { console.error("[portal] client session check failed:", e?.message || e); }
       let result: any;
       if (userFrozen === 1) { res.statusCode = 403; res.end(JSON.stringify({ error: "Account frozen. Contact support." })); return; }
+      if (!fnName || typeof fnName !== "string") {
+        const hint = body?.description || body?.prompt ? " If you want AI estimating, POST /api/ai/estimate with { description, trade } instead." : "";
+        res.statusCode = 400; res.end(JSON.stringify({ error: "Missing function name. POST /api/call with { function: \"<name>\", args: {...} }." + hint })); return;
+      }
       try {
         switch (fnName) {
           case "templates.listTemplates": case "templates.getTemplates": { const td = args?.data || {}; const trade = td.trade; const tab = td.tab || "all"; // all, my, shared
@@ -2877,7 +2883,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             result = await rateListing(pool, userId, args?.data || {});
             break;
           }
-          default: { res.statusCode = 501; res.end(JSON.stringify({ error: "Unknown: " + fnName })); return; }
+          default: { res.statusCode = 501; res.end(JSON.stringify({ error: "Unknown function: " + fnName + ". Check the function name and try again." })); return; }
         }
         res.statusCode = 200; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(result));
       } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message || "Internal error" })); }
