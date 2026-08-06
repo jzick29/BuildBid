@@ -94,7 +94,14 @@ async function handleMe(req: IncomingMessage) {
   const token = parseCookies(req)["buildbid_session"];
   if (!token) return new Response(JSON.stringify({ user: null }), { status: 200, headers: { "Content-Type": "application/json" } });
   const pool = getPool();
-  const r = await pool.query("SELECT u.id, u.email, u.name, u.frozen, u.subscription_tier, u.trial_ends_at, u.role, COALESCE(u.onboarding_completed, 0)::int AS onboarding_completed, COALESCE(u.trade, '') AS trade, COALESCE(u.phone, '') AS phone FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [token]);
+  let r;
+  try {
+    r = await pool.query("SELECT u.id, u.email, u.name, u.frozen, u.subscription_tier, u.trial_ends_at, u.role, COALESCE(u.onboarding_completed, 0)::int AS onboarding_completed, COALESCE(u.trade, '') AS trade, COALESCE(u.phone, '') AS phone FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [token]);
+  } catch {
+    // Fallback for schemas that lack onboarding columns (pre-migration) — never 500
+    r = await pool.query("SELECT u.id, u.email, u.name, u.frozen, u.subscription_tier, u.trial_ends_at, u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [token]);
+    if (r.rows[0]) { r.rows[0].onboarding_completed = 0; r.rows[0].trade = ""; r.rows[0].phone = ""; }
+  }
   if (!r.rows[0]) return new Response(JSON.stringify({ user: null }), { status: 200, headers: { "Content-Type": "application/json" } });
   if (r.rows[0].frozen === 1) return new Response(JSON.stringify({ user: null, error: "Account frozen. Contact support." }), { status: 403, headers: { "Content-Type": "application/json" } });
   return new Response(JSON.stringify({ user: r.rows[0] }), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -109,6 +116,9 @@ async function handleOnboarding(req: IncomingMessage, body: any) {
   const { trade, phone, company_name } = body || {};
   if (!trade) return new Response(JSON.stringify({ success: false, error: "Trade is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
   try {
+    try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed INTEGER NOT NULL DEFAULT 0"); } catch {}
+    try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS trade TEXT DEFAULT ''"); } catch {}
+    try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT ''"); } catch {}
     await pool.query("UPDATE users SET trade=$1, phone=$2, name=COALESCE(NULLIF($3,''), name), onboarding_completed=1 WHERE id=$4", [trade, phone || "", company_name || "", userId]);
     void trackEvent(pool, userId, "onboarding_completed", { trade, phone: phone || "", company_name: company_name || "" });
     return new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -214,6 +224,10 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
       // Migrations: add columns that may not exist in existing databases
       try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS source TEXT DEFAULT ''"); } catch {}
       try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_enabled INTEGER NOT NULL DEFAULT 1"); } catch {}
+      try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed INTEGER NOT NULL DEFAULT 0"); } catch {}
+      try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS trade TEXT DEFAULT ''"); } catch {}
+      try { await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT ''"); } catch {}
+      try { await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS grand_total REAL NOT NULL DEFAULT 0"); } catch {}
       try { await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS tax_rate REAL NOT NULL DEFAULT 0"); } catch {}
       try { await pool.query("ALTER TABLE line_items ADD COLUMN IF NOT EXISTS tax_rate REAL NOT NULL DEFAULT 0"); } catch {}
       // Fix existing TEXT columns to TIMESTAMPTZ (legacy migration)
@@ -781,7 +795,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             const [stats, rev, trade, recent, pipeline] = await Promise.all([
               pool.query("SELECT COUNT(*) as total, SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) as won, SUM(CASE WHEN status='lost' THEN 1 ELSE 0 END) as lost, COALESCE(SUM(CASE WHEN status='won' THEN (SELECT COALESCE(SUM((li.quantity * li.unit_cost) * (1 + li.markup_percent / 100.0)), 0) FROM line_items li WHERE li.estimate_id = estimates.id) ELSE 0 END), 0) as total_revenue, COALESCE(AVG(CASE WHEN status='won' THEN (SELECT COALESCE(AVG(markup_percent), 0) FROM line_items li WHERE li.estimate_id = estimates.id) END), 0) as avg_markup FROM estimates WHERE user_id=$1", [userId]),
-              pool.query("SELECT DATE_TRUNC('month', created_at) as month, SUM(total) as revenue FROM estimates WHERE status='won' AND user_id=$1 GROUP BY month ORDER BY month", [userId]),
+              pool.query("SELECT DATE_TRUNC('month', created_at) as month, SUM(grand_total) as revenue FROM estimates WHERE status='won' AND user_id=$1 GROUP BY month ORDER BY month", [userId]),
               pool.query("SELECT trade, COUNT(*)::int as count, SUM(CASE WHEN status='won' THEN 1 ELSE 0 END)::int as won_count, ROUND(CASE WHEN COUNT(*) > 0 THEN 100.0 * SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) / COUNT(*) ELSE 0 END) as win_rate, COALESCE(ROUND(AVG(CASE WHEN status='won' THEN (SELECT COALESCE(AVG(markup_percent), 0) FROM line_items li WHERE li.estimate_id = estimates.id) END)), 0) as avg_markup, COALESCE(ROUND(AVG(grand_total)), 0) as avg_grand_total FROM estimates WHERE user_id=$1 GROUP BY trade ORDER BY count DESC", [userId]),
               pool.query("SELECT id, project_name, customer_name, trade, grand_total, created_at FROM estimates WHERE user_id=$1 AND status='won' ORDER BY created_at DESC LIMIT 5", [userId]),
               pool.query("SELECT COUNT(*)::int as pipeline_count, COALESCE(SUM(grand_total), 0) as pipeline_value FROM estimates WHERE user_id=$1 AND status IN ('sent','pending','draft')", [userId])
@@ -793,7 +807,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
               winRate: parseInt(s?.total || "0") > 0 ? Math.round((parseInt(s?.won || "0") / (parseInt(s?.won || "0") + parseInt(s?.lost || "0") || 1)) * 100) : 0,
               avgMarkup: Math.round(parseFloat(s?.avg_markup || "0")),
               totalRevenue: parseFloat(s?.total_revenue || "0"),
-              byTrade: trade.rows, byMonth: (await pool.query("SELECT DATE_TRUNC('month', created_at) as month, SUM(total) as revenue FROM estimates WHERE status='won' AND user_id=$1 GROUP BY month ORDER BY month", [userId])).rows,
+              byTrade: trade.rows, byMonth: (await pool.query("SELECT DATE_TRUNC('month', created_at) as month, SUM(grand_total) as revenue FROM estimates WHERE status='won' AND user_id=$1 GROUP BY month ORDER BY month", [userId])).rows,
               recentWins: recent.rows,
               pipelineCount: p?.pipeline_count || 0, pipelineValue: parseFloat(p?.pipeline_value || "0"),
             };
@@ -801,7 +815,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
           }
           case "analytics.getRevenueTrend": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            const rows = (await pool.query("SELECT DATE_TRUNC('month', created_at) as month, SUM(total) as revenue FROM estimates WHERE status='won' AND user_id=$1 GROUP BY month ORDER BY month", [userId])).rows;
+            const rows = (await pool.query("SELECT DATE_TRUNC('month', created_at) as month, SUM(grand_total) as revenue FROM estimates WHERE status='won' AND user_id=$1 GROUP BY month ORDER BY month", [userId])).rows;
             result = rows;
             break;
           }
