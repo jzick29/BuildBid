@@ -793,6 +793,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
           
           case "analytics.getDashboardStats": case "analytics.getAnalytics": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            try { await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS grand_total REAL NOT NULL DEFAULT 0"); } catch {}
             const [stats, rev, trade, recent, pipeline] = await Promise.all([
               pool.query("SELECT COUNT(*) as total, SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) as won, SUM(CASE WHEN status='lost' THEN 1 ELSE 0 END) as lost, COALESCE(SUM(CASE WHEN status='won' THEN (SELECT COALESCE(SUM((li.quantity * li.unit_cost) * (1 + li.markup_percent / 100.0)), 0) FROM line_items li WHERE li.estimate_id = estimates.id) ELSE 0 END), 0) as total_revenue, COALESCE(AVG(CASE WHEN status='won' THEN (SELECT COALESCE(AVG(markup_percent), 0) FROM line_items li WHERE li.estimate_id = estimates.id) END), 0) as avg_markup FROM estimates WHERE user_id=$1", [userId]),
               pool.query("SELECT DATE_TRUNC('month', created_at) as month, SUM(grand_total) as revenue FROM estimates WHERE status='won' AND user_id=$1 GROUP BY month ORDER BY month", [userId]),
@@ -815,6 +816,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
           }
           case "analytics.getRevenueTrend": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            try { await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS grand_total REAL NOT NULL DEFAULT 0"); } catch {}
             const rows = (await pool.query("SELECT DATE_TRUNC('month', created_at) as month, SUM(grand_total) as revenue FROM estimates WHERE status='won' AND user_id=$1 GROUP BY month ORDER BY month", [userId])).rows;
             result = rows;
             break;
@@ -1084,6 +1086,7 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             const as4 = await pool.query("SELECT role FROM users WHERE id = $1", [userId]);
             if (as4.rows[0]?.role !== "admin") { res.statusCode = 403; res.end(JSON.stringify({ error: "Admin required" })); return; }
+            try { await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS grand_total REAL NOT NULL DEFAULT 0"); } catch {}
             const [uc, ec, rc, icc] = await Promise.all([
               pool.query("SELECT COUNT(*)::int as cnt FROM users"),
               pool.query("SELECT COUNT(*)::int as cnt, COALESCE(SUM(grand_total),0) as total_value FROM estimates"),
