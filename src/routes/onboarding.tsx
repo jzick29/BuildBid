@@ -132,6 +132,7 @@ function OnboardingPage() {
                 Skip for now
               </button>
               <button
+                type="button"
                 onClick={() => setStep(2)}
                 disabled={!trade}
                 className="ml-auto rounded-lg bg-indigo-600 px-6 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
