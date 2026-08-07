@@ -35,8 +35,35 @@ function SubscribePage() {
     return () => { active = false; };
   }, []);
 
-  // Stripe checkout is not implemented server-side yet — stub link for now.
-  const stripeLink = "#";
+  // Stripe checkout state — loading + inline error while we fetch the checkout URL
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubscribe() {
+    if (!planId || loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          function: "subscriptions.getStripeLink",
+          args: { data: { plan: planId } },
+        }),
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.url) {
+        throw new Error(data?.error || "Could not start checkout. Please try again.");
+      }
+      // Redirect to Stripe Checkout — on success we navigate away
+      window.location.href = data.url;
+    } catch (e: any) {
+      setError(e?.message || "Something went wrong. Please try again.");
+      setLoading(false);
+    }
+  }
 
   if (!plan || !currentPrices) {
     return (
@@ -110,12 +137,17 @@ function SubscribePage() {
             </p>
           )}
           <div className="mt-8 space-y-3">
-            <a
-              href={stripeLink}
-              className="block w-full rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 text-center"
+            <button
+              type="button"
+              onClick={handleSubscribe}
+              disabled={loading}
+              className="block w-full rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 text-center disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Subscribe Now — ${currentPrices.monthly}/mo
-            </a>
+              {loading ? "Redirecting to Stripe…" : `Subscribe Now — $${currentPrices.monthly}/mo`}
+            </button>
+            {error && (
+              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            )}
             <Link
               to="/"
               className="block text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
