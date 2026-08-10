@@ -137,8 +137,27 @@ function Dashboard() {
   };
 
   if (loading) return <div className="flex min-h-dvh items-center justify-center"><p className="text-gray-500">Loading...</p></div>;
-  if (error) return <div className="flex min-h-dvh items-center justify-center"><p className="text-red-500">{error}</p></div>;
-  if (!user) return null;
+  if (error) return (
+    <div className="flex min-h-dvh items-center justify-center">
+      <div className="text-center">
+        <p className="text-red-500">{error}</p>
+        <button onClick={() => window.location.reload()} className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Retry</button>
+      </div>
+    </div>
+  );
+  if (!user) {
+      window.location.href = "/login";
+      return (
+        <div className="flex min-h-dvh items-center justify-center">
+          <div className="text-center">
+            <p className="text-gray-500 dark:text-gray-400">Redirecting to login...</p>
+            <a href="/login" className="mt-2 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">
+              Click here if not redirected automatically
+            </a>
+          </div>
+        </div>
+      );
+    }
 
   const planLabel = (user.subscriptionTier || "trial").charAt(0).toUpperCase() + (user.subscriptionTier || "trial").slice(1);
   const planBadgeColor = (user.subscriptionTier === "free" || user.subscriptionTier === "trial")
@@ -190,6 +209,16 @@ function Dashboard() {
             <p className="mt-2 text-gray-600 dark:text-gray-400">
               Welcome back, {user.name || user.email}!
             </p>
+            <div className="mt-2 flex items-center gap-3">
+              <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${planBadgeColor}`}>
+                {planLabel} Plan
+              </span>
+              {user.subscriptionTier === "trial" || user.subscriptionTier === "free" ? (
+                <Link to="/subscribe" className="text-xs font-medium text-indigo-600 hover:text-indigo-500">Upgrade →</Link>
+              ) : (
+                <span className="text-xs text-gray-400">Active subscriber</span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <Link
