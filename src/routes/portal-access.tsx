@@ -68,7 +68,19 @@ function PortalAccessPage() {
   const toggleExpand = async (cu: any) => { if (expanded === cu.id) { setExpanded(null); return; } setExpanded(cu.id); await loadEstimates(); };
 
   if (loading) return <div className="flex min-h-dvh items-center justify-center"><p className="text-gray-500">Loading…</p></div>;
-  if (!user) return null;
+  if (!user) {
+      window.location.href = "/login";
+      return (
+        <div className="flex min-h-dvh items-center justify-center">
+          <div className="text-center">
+            <p className="text-gray-500 dark:text-gray-400">Redirecting to login...</p>
+            <a href="/login" className="mt-2 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">
+              Click here if not redirected automatically
+            </a>
+          </div>
+        </div>
+      );
+    }
 
   return (
     <div className="mx-auto w-full max-w-4xl flex-1 px-6 py-12">

@@ -76,7 +76,19 @@ function ReportsPage() {
 
   if (loading && !data) return <div className="flex min-h-dvh items-center justify-center"><p className="text-gray-500">Loading reports…</p></div>;
   if (error && !data) return <div className="flex min-h-dvh items-center justify-center"><div className="text-center"><p className="text-red-500">Error: {error}</p><button onClick={() => window.location.reload()} className="mt-4 text-indigo-600 underline">Retry</button></div></div>;
-  if (!user) return null;
+  if (!user) {
+      window.location.href = "/login";
+      return (
+        <div className="flex min-h-dvh items-center justify-center">
+          <div className="text-center">
+            <p className="text-gray-500 dark:text-gray-400">Redirecting to login...</p>
+            <a href="/login" className="mt-2 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">
+              Click here if not redirected automatically
+            </a>
+          </div>
+        </div>
+      );
+    }
 
   // ---- derived metrics ----
   const winLoss = data?.winLoss || { summary: { total: 0, won: 0, lost: 0, winRate: 0 }, byTrade: [], byMonth: [], bySize: [] };

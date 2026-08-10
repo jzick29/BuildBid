@@ -59,8 +59,27 @@ function SchedulePage() {
   const firstDay = new Date(cy, cm - 1, 1).getDay();
 
   if (loading) return <div className="flex min-h-dvh items-center justify-center"><p className="text-gray-500">Loading...</p></div>;
-  if (error) return <div className="flex min-h-dvh items-center justify-center"><p className="text-red-500">{error}</p></div>;
-  if (!user) return null;
+  if (error) return (
+    <div className="flex min-h-dvh items-center justify-center">
+      <div className="text-center">
+        <p className="text-red-500">{error}</p>
+        <button onClick={() => window.location.reload()} className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Retry</button>
+      </div>
+    </div>
+  );
+  if (!user) {
+      window.location.href = "/login";
+      return (
+        <div className="flex min-h-dvh items-center justify-center">
+          <div className="text-center">
+            <p className="text-gray-500 dark:text-gray-400">Redirecting to login...</p>
+            <a href="/login" className="mt-2 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">
+              Click here if not redirected automatically
+            </a>
+          </div>
+        </div>
+      );
+    }
 
   return (
     <div className="flex min-h-dvh flex-col">
