@@ -372,13 +372,14 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
       }
 
       await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS signed_at TIMESTAMPTZ");
+      // Upsert admin (idempotent): do NOT delete the row first — a failed INSERT would
+      // leave the account gone and lock the owner out. ON CONFLICT (email) updates in place.
       await pool.query("DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email='admin@buildbid.pro')");
-      await pool.query("DELETE FROM users WHERE email='admin@buildbid.pro'");
       const id = crypto.randomUUID();
       const hash = bcrypt.hashSync("BuildBid2026!", 10);
       const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-      await pool.query("INSERT INTO users (id, email, password_hash, name, subscription_tier, trial_ends_at, role) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-        [id, "admin@buildbid.pro", hash, "Admin", "trial", trialEndsAt, "admin"]);
+      await pool.query("INSERT INTO users (id, email, password_hash, name, subscription_tier, trial_ends_at, role, onboarding_completed) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, name = EXCLUDED.name, subscription_tier = EXCLUDED.subscription_tier, trial_ends_at = EXCLUDED.trial_ends_at, role = EXCLUDED.role, onboarding_completed = EXCLUDED.onboarding_completed, frozen = 0",
+        [id, "admin@buildbid.pro", hash, "Admin", "trial", trialEndsAt, "admin", 1]);
       res.statusCode = 200; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ success: true, email: "admin@buildbid.pro" }));
       return;
     }
