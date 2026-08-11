@@ -270,6 +270,10 @@ function EstimateDetail() {
     }
   };
 
+  const scrollToSignature = () => {
+    document.getElementById("signature-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const handleCreateTimeEntry = async () => {
     if (!timeHours || parseFloat(timeHours) <= 0) return;
     setSavingTime(true);
@@ -524,7 +528,7 @@ return (
           <button onClick={handleSaveVersion} disabled={savingVersion} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
             {savingVersion ? "Saving..." : "Save Version"}
           </button>
-          <button onClick={() => setShowSaveTemplate(true)} className="rounded-lg border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950">
+          <div className="flex gap-2">
             <button onClick={async () => {
               setGeneratingPortal(true);
               try {
@@ -537,8 +541,10 @@ return (
             }} disabled={generatingPortal} className="rounded-lg border border-purple-300 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-50 disabled:opacity-50 dark:border-purple-700 dark:text-purple-400 dark:hover:bg-purple-950">
               {generatingPortal ? "Generating..." : "🔗 Share with Customer"}
             </button>
-            Save as Template
-          </button>
+            <button onClick={() => setShowSaveTemplate(true)} className="rounded-lg border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-950">
+              Save as Template
+            </button>
+          </div>
           <button onClick={async () => {
             try {
               const r = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "quickbooks.exportToQuickBooks", args: { data: { estimateId: id } } }), credentials: "include" });
@@ -615,7 +621,7 @@ return (
         </div>
       )}
       {/* Signature Section */}
-      <div className="mt-6 rounded-xl border border-gray-200 p-6 dark:border-gray-800">
+      <div id="signature-section" className="mt-6 rounded-xl border border-gray-200 p-6 dark:border-gray-800">
         <h3 className="font-semibold text-lg mb-2">Signature</h3>
         {signature ? (
           <div>
