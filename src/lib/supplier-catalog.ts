@@ -115,9 +115,9 @@ const PLUMBING_ITEMS: CatalogItem[] = [
   // Water Heaters
   { sku: "1001796468", name: "40 Gal Natural Gas Water Heater", description: "40k BTU, 0.62 UEF, 6-year tank warranty", unit: "each", unit_cost: 649.00, trade: "Plumbing", supplier: "Rheem" },
   { sku: "1001796215", name: "50 Gal Electric Water Heater", description: "4500W dual element, 0.93 UEF, 6-year tank warranty", unit: "each", unit_cost: 529.00, trade: "Plumbing", supplier: "Rheem" },
-  { sku: "1002723167", name: "50 Gal Power Vent NG Water Heater", description: "50k BTU, 0.70 UEF, residential power-vent", unit: "each", unit_cost: 1,149.00, trade: "Plumbing", supplier: "Rheem" },
+  { sku: "1002723167", name: "50 Gal Power Vent NG Water Heater", description: "50k BTU, 0.70 UEF, residential power-vent", unit: "each", unit_cost: 1149.00, trade: "Plumbing", supplier: "Rheem" },
   { sku: "ECO27", name: "27kW Tankless Electric Water Heater", description: "240V, 3x40A, 2.9 GPM at 35°F rise", unit: "each", unit_cost: 489.00, trade: "Plumbing", supplier: "EcoSmart" },
-  { sku: "GTS-540-NG", name: "Tankless NG Water Heater Indoor", description: "199k BTU, 9.8 GPM max, condensing", unit: "each", unit_cost: 1,695.00, trade: "Plumbing", supplier: "Takagi" },
+  { sku: "GTS-540-NG", name: "Tankless NG Water Heater Indoor", description: "199k BTU, 9.8 GPM max, condensing", unit: "each", unit_cost: 1695.00, trade: "Plumbing", supplier: "Takagi" },
 
   // Fixtures
   { sku: "22180-SR-CP", name: "Single-Handle Bathroom Faucet", description: "WaterSense, chrome, drain assembly included", unit: "each", unit_cost: 89.00, trade: "Plumbing", supplier: "Delta" },
@@ -148,24 +148,24 @@ const PLUMBING_ITEMS: CatalogItem[] = [
 
 const HVAC_ITEMS: CatalogItem[] = [
   // Equipment
-  { sku: "4TTR4036L1000A", name: "3-Ton 14 SEER2 AC Condenser", description: "R-454B, single-stage, 208/230V single-phase", unit: "each", unit_cost: 2,495.00, trade: "HVAC", supplier: "Trane" },
-  { sku: "4TTR4048L1000A", name: "4-Ton 14 SEER2 AC Condenser", description: "R-454B, single-stage, 208/230V single-phase", unit: "each", unit_cost: 2,895.00, trade: "HVAC", supplier: "Trane" },
-  { sku: "4TTR4060L1000A", name: "5-Ton 14 SEER2 AC Condenser", description: "R-454B, single-stage, 208/230V single-phase", unit: "each", unit_cost: 3,295.00, trade: "HVAC", supplier: "Trane" },
-  { sku: "4MXA2036A10N0A", name: "3-Ton 17 SEER2 AC Condenser", description: "R-454B, two-stage, variable-speed compatible", unit: "each", unit_cost: 3,895.00, trade: "HVAC", supplier: "Trane" },
-  { sku: "GSZB403610", name: "3-Ton 14.3 SEER2 Heat Pump", description: "R-454B, single-stage, 208/230V", unit: "each", unit_cost: 3,095.00, trade: "HVAC", supplier: "Goodman" },
-  { sku: "GSZB404810", name: "4-Ton 14.3 SEER2 Heat Pump", description: "R-454B, single-stage, 208/230V", unit: "each", unit_cost: 3,495.00, trade: "HVAC", supplier: "Goodman" },
+  { sku: "4TTR4036L1000A", name: "3-Ton 14 SEER2 AC Condenser", description: "R-454B, single-stage, 208/230V single-phase", unit: "each", unit_cost: 2495.00, trade: "HVAC", supplier: "Trane" },
+  { sku: "4TTR4048L1000A", name: "4-Ton 14 SEER2 AC Condenser", description: "R-454B, single-stage, 208/230V single-phase", unit: "each", unit_cost: 2895.00, trade: "HVAC", supplier: "Trane" },
+  { sku: "4TTR4060L1000A", name: "5-Ton 14 SEER2 AC Condenser", description: "R-454B, single-stage, 208/230V single-phase", unit: "each", unit_cost: 3295.00, trade: "HVAC", supplier: "Trane" },
+  { sku: "4MXA2036A10N0A", name: "3-Ton 17 SEER2 AC Condenser", description: "R-454B, two-stage, variable-speed compatible", unit: "each", unit_cost: 3895.00, trade: "HVAC", supplier: "Trane" },
+  { sku: "GSZB403610", name: "3-Ton 14.3 SEER2 Heat Pump", description: "R-454B, single-stage, 208/230V", unit: "each", unit_cost: 3095.00, trade: "HVAC", supplier: "Goodman" },
+  { sku: "GSZB404810", name: "4-Ton 14.3 SEER2 Heat Pump", description: "R-454B, single-stage, 208/230V", unit: "each", unit_cost: 3495.00, trade: "HVAC", supplier: "Goodman" },
   { sku: "CAPF3743C6", name: "3-Ton Cased Evaporator Coil", description: "Cased A-coil, TXV, for R-454B", unit: "each", unit_cost: 595.00, trade: "HVAC", supplier: "Goodman" },
   { sku: "CAPF4860C6", name: "4-5 Ton Cased Evaporator Coil", description: "Cased A-coil, TXV, for R-454B", unit: "each", unit_cost: 695.00, trade: "HVAC", supplier: "Goodman" },
-  { sku: "GM9S800603AN", name: "60k BTU 80% Gas Furnace", description: "Single-stage, upflow/horizontal, 17.5\" wide", unit: "each", unit_cost: 1,095.00, trade: "HVAC", supplier: "Goodman" },
-  { sku: "GM9S800805CN", name: "80k BTU 80% Gas Furnace", description: "Single-stage, upflow/horizontal, 21\" wide", unit: "each", unit_cost: 1,195.00, trade: "HVAC", supplier: "Goodman" },
-  { sku: "GM9S801005CN", name: "100k BTU 80% Gas Furnace", description: "Single-stage, upflow/horizontal, 21\" wide", unit: "each", unit_cost: 1,395.00, trade: "HVAC", supplier: "Goodman" },
-  { sku: "GMVC960805CN", name: "80k BTU 96% Modulating Furnace", description: "Variable-speed ECM, ComfortBridge, 21\" wide", unit: "each", unit_cost: 2,295.00, trade: "HVAC", supplier: "Goodman" },
+  { sku: "GM9S800603AN", name: "60k BTU 80% Gas Furnace", description: "Single-stage, upflow/horizontal, 17.5\" wide", unit: "each", unit_cost: 1095.00, trade: "HVAC", supplier: "Goodman" },
+  { sku: "GM9S800805CN", name: "80k BTU 80% Gas Furnace", description: "Single-stage, upflow/horizontal, 21\" wide", unit: "each", unit_cost: 1195.00, trade: "HVAC", supplier: "Goodman" },
+  { sku: "GM9S801005CN", name: "100k BTU 80% Gas Furnace", description: "Single-stage, upflow/horizontal, 21\" wide", unit: "each", unit_cost: 1395.00, trade: "HVAC", supplier: "Goodman" },
+  { sku: "GMVC960805CN", name: "80k BTU 96% Modulating Furnace", description: "Variable-speed ECM, ComfortBridge, 21\" wide", unit: "each", unit_cost: 2295.00, trade: "HVAC", supplier: "Goodman" },
   { sku: "R801SA075417MSA", name: "75k BTU 80% Gas Furnace", description: "Upflow/horizontal, 17.5\" wide, aluminized HX", unit: "each", unit_cost: 995.00, trade: "HVAC", supplier: "Rheem" },
 
   // Mini-Splits
-  { sku: "38MHRBQ24AA3", name: "24k BTU Ductless Mini-Split HP", description: "20.5 SEER, wireless remote, 208/230V", unit: "each", unit_cost: 1,649.00, trade: "HVAC", supplier: "Carrier" },
-  { sku: "38MHRBQ36AA3", name: "36k BTU Ductless Mini-Split HP", description: "18 SEER, wireless remote, 208/230V", unit: "each", unit_cost: 2,349.00, trade: "HVAC", supplier: "Carrier" },
-  { sku: "MSZ-FS12NA", name: "12k BTU Wall-Mount Mini-Split HP", description: "26.1 SEER, Energy Star, i-see sensor", unit: "each", unit_cost: 1,895.00, trade: "HVAC", supplier: "Mitsubishi" },
+  { sku: "38MHRBQ24AA3", name: "24k BTU Ductless Mini-Split HP", description: "20.5 SEER, wireless remote, 208/230V", unit: "each", unit_cost: 1649.00, trade: "HVAC", supplier: "Carrier" },
+  { sku: "38MHRBQ36AA3", name: "36k BTU Ductless Mini-Split HP", description: "18 SEER, wireless remote, 208/230V", unit: "each", unit_cost: 2349.00, trade: "HVAC", supplier: "Carrier" },
+  { sku: "MSZ-FS12NA", name: "12k BTU Wall-Mount Mini-Split HP", description: "26.1 SEER, Energy Star, i-see sensor", unit: "each", unit_cost: 1895.00, trade: "HVAC", supplier: "Mitsubishi" },
 
   // Ductwork & Ventilation
   { sku: "F6X300X25", name: "6\" x 25ft R-6 Flex Duct", description: "Insulated, Class 1 air connector, silver jacket", unit: "each", unit_cost: 34.97, trade: "HVAC", supplier: "Master Flow" },

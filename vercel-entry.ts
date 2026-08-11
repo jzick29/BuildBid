@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { Pool } from "pg";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import handler from "./dist/server/server.js";
+import { getHandler, registeredNames } from "./src/lib/call-registry";
 import { parseEstimateFromDescription, estimateFromDescription } from "./src/lib/ai-prompts";
 import { sendSms, findCustomerPhone, getSmsSettings, saveSmsSettings, getSmsLogs, getAdminSmsLogs } from "./src/lib/sms";
 import { getReportFilters, getProfitability, getWinLoss, getEstimatorPerformance, getRevenueTrends, getCostBreakdown } from "./src/lib/reports";
@@ -21,7 +22,40 @@ import {
   listApiKeys, createApiKey, revokeApiKey, listWebhooks, createWebhook, updateWebhook, deleteWebhook, testFireWebhook, getWebhookLogs, getZapierManifest, fireWebhook, verifyApiKey,
 } from "./src/lib/webhooks";
 import { trackEvent } from "./src/lib/analytics";
-import "./src/lib/signatures"; // side-effect: registers signatures.saveSignature / signatures.getSignature handlers at boot
+import "./src/lib/signatures";
+import "./src/lib/admin"; // side-effect: registers admin handlers
+import "./src/lib/blog"; // side-effect: registers blog handlers
+import "./src/lib/bulk-import"; // side-effect: registers bulk-import handlers
+import "./src/lib/change-order-workflow"; // side-effect: registers change-order-workflow handlers
+import "./src/lib/change-orders"; // side-effect: registers change-orders handlers
+import "./src/lib/contracts"; // side-effect: registers contracts handlers
+import "./src/lib/customers"; // side-effect: registers customers handlers
+import "./src/lib/email-automations"; // side-effect: registers email-automations handlers
+import "./src/lib/email-proposals"; // side-effect: registers email-proposals handlers
+import "./src/lib/estimates"; // side-effect: registers estimates handlers
+import "./src/lib/expenses"; // side-effect: registers expenses handlers
+import "./src/lib/feedback"; // side-effect: registers feedback handlers
+import "./src/lib/hubspot"; // side-effect: registers hubspot handlers
+import "./src/lib/integrations"; // side-effect: registers integrations handlers
+import "./src/lib/invoices"; // side-effect: registers invoices handlers
+import "./src/lib/job-costing"; // side-effect: registers job-costing handlers
+import "./src/lib/materials"; // side-effect: registers materials handlers
+import "./src/lib/notifications"; // side-effect: registers notifications handlers
+import "./src/lib/payments"; // side-effect: registers payments handlers
+import "./src/lib/photos"; // side-effect: registers photos handlers
+import "./src/lib/portal"; // side-effect: registers portal handlers
+import "./src/lib/price-lists"; // side-effect: registers price-lists handlers
+import "./src/lib/profit-margin"; // side-effect: registers profit-margin handlers
+import "./src/lib/push"; // side-effect: registers push handlers
+import "./src/lib/quickbooks"; // side-effect: registers quickbooks handlers
+import "./src/lib/salesforce"; // side-effect: registers salesforce handlers
+import "./src/lib/scheduling"; // side-effect: registers scheduling handlers
+import "./src/lib/team"; // side-effect: registers team handlers
+import "./src/lib/templates"; // side-effect: registers templates handlers
+import "./src/lib/time-entries"; // side-effect: registers time-entries handlers
+import "./src/lib/tracking"; // side-effect: registers tracking handlers
+import "./src/lib/xero"; // side-effect: registers xero handlers
+import "./src/lib/useSubscription"; // side-effect: registers subscriptions.getSubscription handler
 
 const getPool = () => {
   if (!(globalThis as any).__buildbid_pool) {
@@ -108,21 +142,46 @@ async function handleLogin(body: any) {
   resp.headers.append("Set-Cookie", `buildbid_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${7 * 86400}`);
   return resp;
 }
-async function handleMe(req: IncomingMessage) {
-  const token = parseCookies(req)["buildbid_session"];
-  if (!token) return new Response(JSON.stringify({ user: null }), { status: 200, headers: { "Content-Type": "application/json" } });
-  const pool = getPool();
-  let r;
-  try {
-    r = await pool.query("SELECT u.id, u.email, u.name, u.frozen, u.subscription_tier, u.trial_ends_at, u.role, COALESCE(u.onboarding_completed, 0)::int AS onboarding_completed, COALESCE(u.trade, '') AS trade, COALESCE(u.phone, '') AS phone FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [token]);
-  } catch {
-    // Fallback for schemas that lack onboarding columns (pre-migration) — never 500
-    r = await pool.query("SELECT u.id, u.email, u.name, u.frozen, u.subscription_tier, u.trial_ends_at, u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [token]);
-    if (r.rows[0]) { r.rows[0].onboarding_completed = 0; r.rows[0].trade = ""; r.rows[0].phone = ""; }
+async function handleLoginForm(body: string) {
+  const params = new URLSearchParams(body);
+  const email = params.get("email") || "";
+  const password = params.get("password") || "";
+  if (!email || !password) {
+    return new Response("", { status: 302, headers: { "Location": "/login?error=Missing+fields" } });
   }
-  if (!r.rows[0]) return new Response(JSON.stringify({ user: null }), { status: 200, headers: { "Content-Type": "application/json" } });
-  if (r.rows[0].frozen === 1) return new Response(JSON.stringify({ user: null, error: "Account frozen. Contact support." }), { status: 403, headers: { "Content-Type": "application/json" } });
-  return new Response(JSON.stringify({ user: r.rows[0] }), { status: 200, headers: { "Content-Type": "application/json" } });
+  const pool = getPool();
+  const r = await pool.query("SELECT id, email, name, password_hash, frozen, role FROM users WHERE email=$1", [email]);
+  if (!r.rows[0] || !bcrypt.compareSync(password, r.rows[0].password_hash)) {
+    return new Response("", { status: 302, headers: { "Location": "/login?error=Invalid+credentials" } });
+  }
+  if (r.rows[0].frozen === 1) {
+    return new Response("", { status: 302, headers: { "Location": "/login?error=Account+frozen" } });
+  }
+  const token = crypto.randomUUID();
+  await pool.query("INSERT INTO sessions (id, user_id, expires_at) VALUES ($1,$2,$3)", [token, r.rows[0].id, new Date(Date.now() + 7 * 86400000).toISOString()]);
+    if (r.rows[0].role === "admin") { void pool.query("UPDATE users SET onboarding_completed = 1 WHERE id = $1", [r.rows[0].id]); }
+void trackEvent(pool, r.rows[0].id, "login");
+  const resp = new Response("", { status: 302, headers: { "Location": "/dashboard" } });
+  resp.headers.append("Set-Cookie", `buildbid_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${7 * 86400}`);
+  return resp;
+}
+async function handleMe(req: IncomingMessage) {
+  try {
+    const token = parseCookies(req)["buildbid_session"];
+    if (!token) return new Response(JSON.stringify({ user: null }), { status: 200, headers: { "Content-Type": "application/json" } });
+    const pool = getPool();
+    let r;
+    try {
+      r = await pool.query("SELECT u.id, u.email, u.name, u.frozen, u.subscription_tier, u.trial_ends_at, u.role, COALESCE(u.onboarding_completed, 0)::int AS onboarding_completed, COALESCE(u.trade, '') AS trade, COALESCE(u.phone, '') AS phone FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [token]);
+    } catch {
+      // Fallback for schemas that lack onboarding columns (pre-migration) — never 500
+      r = await pool.query("SELECT u.id, u.email, u.name, u.frozen, u.subscription_tier, u.trial_ends_at, u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 AND s.expires_at>NOW()", [token]);
+      if (r.rows[0]) { r.rows[0].onboarding_completed = 0; r.rows[0].trade = ""; r.rows[0].phone = ""; }
+    }
+    if (!r.rows[0]) return new Response(JSON.stringify({ user: null }), { status: 200, headers: { "Content-Type": "application/json" } });
+    if (r.rows[0].frozen === 1) return new Response(JSON.stringify({ user: null, error: "Account frozen. Contact support." }), { status: 403, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ user: r.rows[0] }), { status: 200, headers: { "Content-Type": "application/json" } });
+  } catch (e: any) { console.error("[handleMe]", e.message); return new Response(JSON.stringify({ user: null, error: "Session check failed" }), { status: 200, headers: { "Content-Type": "application/json" } }); }
 }
 async function handleOnboarding(req: IncomingMessage, body: any) {
   const token = parseCookies(req)["buildbid_session"];
@@ -157,30 +216,58 @@ const CLIENT_SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
 // Resolve the current portal (client) user from the client session cookie, or null.
 async function getClientUser(req: IncomingMessage) {
-  const token = parseCookies(req)[CLIENT_SESSION_COOKIE];
-  if (!token) return null;
-  const pool = getPool();
-  const r = await pool.query(
-    "SELECT cu.id, cu.user_id, cu.email, cu.name, cu.company_name, cu.active FROM client_sessions cs JOIN client_users cu ON cu.id = cs.client_user_id WHERE cs.id=$1 AND cs.expires_at > NOW()",
-    [token]
-  );
-  if (!r.rows[0] || r.rows[0].active !== 1) return null;
-  return r.rows[0];
+  try {
+    const token = parseCookies(req)[CLIENT_SESSION_COOKIE];
+    if (!token) return null;
+    const pool = getPool();
+    const r = await pool.query(
+      "SELECT cu.id, cu.user_id, cu.email, cu.name, cu.company_name, cu.active FROM client_sessions cs JOIN client_users cu ON cu.id = cs.client_user_id WHERE cs.id=$1 AND cs.expires_at > NOW()",
+      [token]
+    );
+    if (!r.rows[0] || r.rows[0].active !== 1) return null;
+    return r.rows[0];
+  } catch (e: any) { console.error("[getClientUser]", e.message); return null; }
 }
 
 async function handleClientLogin(body: any) {
-  const { email, password } = body || {};
-  if (!email || !password) return new Response(JSON.stringify({ error: "Email and password are required" }), { status: 400, headers: { "Content-Type": "application/json" } });
-  const pool = getPool();
-  const r = await pool.query("SELECT id, user_id, email, name, company_name, password_hash, active FROM client_users WHERE LOWER(email)=LOWER($1)", [email]);
-  const row = r.rows[0];
-  if (!row || !bcrypt.compareSync(password, row.password_hash)) return new Response(JSON.stringify({ error: "Invalid email or password" }), { status: 401, headers: { "Content-Type": "application/json" } });
-  if (row.active !== 1) return new Response(JSON.stringify({ error: "This portal account has been disabled. Contact your contractor." }), { status: 403, headers: { "Content-Type": "application/json" } });
-  const token = crypto.randomUUID();
-  await pool.query("INSERT INTO client_sessions (id, client_user_id, expires_at) VALUES ($1,$2,$3)", [token, row.id, new Date(Date.now() + CLIENT_SESSION_DURATION_MS).toISOString()]);
-  const resp = new Response(JSON.stringify({ success: true, user: { id: row.id, email: row.email, name: row.name, company_name: row.company_name } }), { status: 200, headers: { "Content-Type": "application/json" } });
-  resp.headers.append("Set-Cookie", `${CLIENT_SESSION_COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${30 * 86400}`);
-  return resp;
+  try {
+    const { email, password } = body || {};
+    if (!email || !password) return new Response(JSON.stringify({ error: "Email and password are required" }), { status: 400, headers: { "Content-Type": "application/json" } });
+    const pool = getPool();
+    const r = await pool.query("SELECT id, user_id, email, name, company_name, password_hash, active FROM client_users WHERE LOWER(email)=LOWER($1)", [email]);
+    const row = r.rows[0];
+    if (!row || !bcrypt.compareSync(password, row.password_hash)) return new Response(JSON.stringify({ error: "Invalid email or password" }), { status: 401, headers: { "Content-Type": "application/json" } });
+    if (row.active !== 1) return new Response(JSON.stringify({ error: "This portal account has been disabled. Contact your contractor." }), { status: 403, headers: { "Content-Type": "application/json" } });
+    const token = crypto.randomUUID();
+    await pool.query("INSERT INTO client_sessions (id, client_user_id, expires_at) VALUES ($1,$2,$3)", [token, row.id, new Date(Date.now() + CLIENT_SESSION_DURATION_MS).toISOString()]);
+    const resp = new Response(JSON.stringify({ success: true, user: { id: row.id, email: row.email, name: row.name, company_name: row.company_name } }), { status: 200, headers: { "Content-Type": "application/json" } });
+    resp.headers.append("Set-Cookie", `${CLIENT_SESSION_COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${30 * 86400}`);
+    return resp;
+  } catch (e: any) { console.error("[handleClientLogin]", e.message); return new Response(JSON.stringify({ error: "Login failed - please try again" }), { status: 500, headers: { "Content-Type": "application/json" } }); }
+}
+async function handlePortalLoginForm(body: string) {
+  const params = new URLSearchParams(body);
+  const email = params.get("email") || "";
+  const password = params.get("password") || "";
+  if (!email || !password) {
+    return new Response("", { status: 302, headers: { "Location": "/portal/login?error=Missing+fields" } });
+  }
+  try {
+    const pool = getPool();
+    const r = await pool.query("SELECT id, user_id, email, name, company_name, password_hash, active FROM client_users WHERE LOWER(email)=LOWER($1)", [email]);
+    const row = r.rows[0];
+    if (!row || !bcrypt.compareSync(password, row.password_hash)) {
+      return new Response("", { status: 302, headers: { "Location": "/portal/login?error=Invalid+credentials" } });
+    }
+    if (row.active !== 1) {
+      return new Response("", { status: 302, headers: { "Location": "/portal/login?error=Account+disabled" } });
+    }
+    const token = crypto.randomUUID();
+    await pool.query("INSERT INTO client_sessions (id, client_user_id, expires_at) VALUES ($1,$2,$3)", [token, row.id, new Date(Date.now() + CLIENT_SESSION_DURATION_MS).toISOString()]);
+    const resp = new Response("", { status: 302, headers: { "Location": "/portal" } });
+    resp.headers.append("Set-Cookie", `${CLIENT_SESSION_COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${30 * 86400}`);
+    return resp;
+  } catch (e: any) { console.error("[handlePortalLoginForm]", e.message); return new Response("", { status: 302, headers: { "Location": "/portal/login?error=Login+failed" } }); }
 }
 
 async function handleClientLogout(req: IncomingMessage) {
@@ -192,9 +279,11 @@ async function handleClientLogout(req: IncomingMessage) {
 }
 
 async function handleClientMe(req: IncomingMessage) {
-  const client = await getClientUser(req);
-  if (!client) return new Response(JSON.stringify({ user: null }), { status: 200, headers: { "Content-Type": "application/json" } });
-  return new Response(JSON.stringify({ user: { id: client.id, email: client.email, name: client.name, company_name: client.company_name } }), { status: 200, headers: { "Content-Type": "application/json" } });
+  try {
+    const client = await getClientUser(req);
+    if (!client) return new Response(JSON.stringify({ user: null }), { status: 200, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ user: { id: client.id, email: client.email, name: client.name, company_name: client.company_name } }), { status: 200, headers: { "Content-Type": "application/json" } });
+  } catch (e: any) { console.error("[handleClientMe]", e.message); return new Response(JSON.stringify({ user: null }), { status: 200, headers: { "Content-Type": "application/json" } }); }
 }
 
 function toWebRequest(req: IncomingMessage): Request {
@@ -214,10 +303,15 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
     const url = req.url ?? "/";
     // Auth
     if (req.method === "POST" && url === "/api/signup") { const wr = await handleSignup(await readBody(req)); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
+    if (req.method === "POST" && url === "/login") { const wr = await handleLoginForm(await readRawBody(req)); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
     if (req.method === "POST" && url === "/api/login") { const wr = await handleLogin(await readBody(req)); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
     if (req.method === "GET" && url === "/api/me") { const wr = await handleMe(req); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
     if (req.method === "POST" && url === "/api/onboarding") { const wr = await handleOnboarding(req, await readBody(req)); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
     if (req.method === "POST" && url === "/api/logout") { const wr = await handleLogout(req); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
+    if (req.method === "POST" && url === "/api/client/login") { const wr = await handleClientLogin(await readBody(req)); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
+    if (req.method === "POST" && url === "/api/client/logout") { const wr = await handleClientLogout(req); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
+    if (req.method === "GET" && url === "/api/client/me") { const wr = await handleClientMe(req); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
+    if (req.method === "POST" && url === "/api/fix-admin") { const pool = getPool(); await pool.query("UPDATE users SET onboarding_completed = 1 WHERE role = 'admin'"); res.statusCode = 200; res.end(JSON.stringify({ ok: true })); return; }
     if (req.method === "POST" && url === "/api/seed-admin") {
       const pool = getPool();
       // Ensure schema exists
@@ -622,8 +716,21 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         res.statusCode = 400; res.end(JSON.stringify({ error: "Missing function name. POST /api/call with { function: \"<name>\", args: {...} }." + hint })); return;
       }
       try {
+        const registered = getHandler(fnName);
+        if (registered) {
+          result = await registered(args, token);
+        } else {
         switch (fnName) {
           case "templates.listTemplates": case "templates.getTemplates": { const td = args?.data || {}; const trade = td.trade; const tab = td.tab || "all"; // all, my, shared
+            let rows: any[];
+            if (tab === "my" && userId) {
+              rows = trade ? (await pool.query("SELECT * FROM templates WHERE user_id=$1 AND trade_type=$2 ORDER BY name", [userId, trade])).rows : (await pool.query("SELECT * FROM templates WHERE user_id=$1 ORDER BY name", [userId])).rows;
+            } else if (tab === "shared" && userId) {
+              rows = (await pool.query("SELECT t.*, ts.shared_by FROM templates t JOIN template_shares ts ON ts.template_id=t.id WHERE t.user_id IS DISTINCT FROM $1 ORDER BY t.name", [userId])).rows;
+            } else {
+              rows = trade ? (await pool.query("SELECT * FROM templates WHERE (user_id IS NULL OR user_id=$1) AND trade_type=$2 ORDER BY name", [userId, trade])).rows : (await pool.query("SELECT * FROM templates WHERE user_id IS NULL OR user_id=$1 ORDER BY trade_type, name", [userId])).rows;
+            }
+            result = { templates: rows }; break; }case "templates.getTemplates": { const td = args?.data || {}; const trade = td.trade; const tab = td.tab || "all"; // all, my, shared
             let rows: any[];
             if (tab === "my" && userId) {
               rows = trade ? (await pool.query("SELECT * FROM templates WHERE user_id=$1 AND trade_type=$2 ORDER BY name", [userId, trade])).rows : (await pool.query("SELECT * FROM templates WHERE user_id=$1 ORDER BY name", [userId])).rows;
@@ -814,6 +921,29 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
           }
           
           case "analytics.getDashboardStats": case "analytics.getAnalytics": {
+            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+            try { await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS grand_total REAL NOT NULL DEFAULT 0"); } catch {}
+            await backfillGrandTotals(pool);
+            const [stats, rev, trade, recent, pipeline] = await Promise.all([
+              pool.query("SELECT COUNT(*) as total, SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) as won, SUM(CASE WHEN status='lost' THEN 1 ELSE 0 END) as lost, COALESCE(SUM(CASE WHEN status='won' THEN (SELECT COALESCE(SUM((li.quantity * li.unit_cost) * (1 + li.markup_percent / 100.0)), 0) FROM line_items li WHERE li.estimate_id = estimates.id) ELSE 0 END), 0) as total_revenue, COALESCE(AVG(CASE WHEN status='won' THEN (SELECT COALESCE(AVG(markup_percent), 0) FROM line_items li WHERE li.estimate_id = estimates.id) END), 0) as avg_markup FROM estimates WHERE user_id=$1", [userId]),
+              pool.query("SELECT DATE_TRUNC('month', created_at) as month, SUM(grand_total) as revenue FROM estimates WHERE status='won' AND user_id=$1 GROUP BY month ORDER BY month", [userId]),
+              pool.query("SELECT trade, COUNT(*)::int as count, SUM(CASE WHEN status='won' THEN 1 ELSE 0 END)::int as won_count, ROUND(CASE WHEN COUNT(*) > 0 THEN 100.0 * SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) / COUNT(*) ELSE 0 END) as win_rate, COALESCE(ROUND(AVG(CASE WHEN status='won' THEN (SELECT COALESCE(AVG(markup_percent), 0) FROM line_items li WHERE li.estimate_id = estimates.id) END)), 0) as avg_markup, COALESCE(ROUND(AVG(grand_total)), 0) as avg_grand_total FROM estimates WHERE user_id=$1 GROUP BY trade ORDER BY count DESC", [userId]),
+              pool.query("SELECT id, project_name, customer_name, trade, grand_total, created_at FROM estimates WHERE user_id=$1 AND status='won' ORDER BY created_at DESC LIMIT 5", [userId]),
+              pool.query("SELECT COUNT(*)::int as pipeline_count, COALESCE(SUM(grand_total), 0) as pipeline_value FROM estimates WHERE user_id=$1 AND status IN ('sent','pending','draft')", [userId])
+            ]);
+            const s = stats.rows[0];
+            const p = pipeline.rows[0];
+            result = {
+              totalEstimates: parseInt(s?.total || "0"), wonCount: parseInt(s?.won || "0"), lostCount: parseInt(s?.lost || "0"),
+              winRate: parseInt(s?.total || "0") > 0 ? Math.round((parseInt(s?.won || "0") / (parseInt(s?.won || "0") + parseInt(s?.lost || "0") || 1)) * 100) : 0,
+              avgMarkup: Math.round(parseFloat(s?.avg_markup || "0")),
+              totalRevenue: parseFloat(s?.total_revenue || "0"),
+              byTrade: trade.rows, byMonth: (await pool.query("SELECT DATE_TRUNC('month', created_at) as month, SUM(grand_total) as revenue FROM estimates WHERE status='won' AND user_id=$1 GROUP BY month ORDER BY month", [userId])).rows,
+              recentWins: recent.rows,
+              pipelineCount: p?.pipeline_count || 0, pipelineValue: parseFloat(p?.pipeline_value || "0"),
+            };
+            break;
+          }case "analytics.getAnalytics": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             try { await pool.query("ALTER TABLE estimates ADD COLUMN IF NOT EXISTS grand_total REAL NOT NULL DEFAULT 0"); } catch {}
             await backfillGrandTotals(pool);
@@ -2105,173 +2235,41 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             };
             break;
           }
-          case "rfqs.list": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await listRfqs(args, userId, pool);
-            break;
-          }
-          case "rfqs.get": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getRfq(args, userId, pool);
-            break;
-          }
-          case "rfqs.create": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await createRfq(args, userId, pool);
-            break;
-          }
-          case "rfqs.updateStatus": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await updateRfqStatus(args, userId, pool);
-            break;
-          }
-          case "rfqs.addQuote": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await addQuote(args, userId, pool);
-            break;
-          }
-          case "rfqs.updateQuoteStatus": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await updateQuoteStatus(args, userId, pool);
-            break;
-          }
-          case "rfqs.deleteQuote": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await deleteQuote(args, userId, pool);
-            break;
-          }
-          case "rfqs.compare": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await compareQuotes(args, userId, pool);
-            break;
-          }
-          case "takeoffs.list": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await listTakeoffs(args, userId, pool);
-            break;
-          }
-          case "takeoffs.get": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getTakeoff(args, userId, pool);
-            break;
-          }
-          case "takeoffs.create": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await createTakeoff(args, userId, pool);
-            break;
-          }
-          case "takeoffs.setScale": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await setScale(args, userId, pool);
-            break;
-          }
-          case "takeoffs.addMeasurement": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await addMeasurement(args, userId, pool);
-            break;
-          }
-          case "takeoffs.deleteMeasurement": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await deleteMeasurement(args, userId, pool);
-            break;
-          }
-          case "takeoffs.delete": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await deleteTakeoff(args, userId, pool);
-            break;
-          }
-          case "branding.get": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getBranding(args, userId, pool);
-            break;
-          }
-          case "branding.save": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await saveBranding(args, userId, pool);
-            break;
-          }
+          
+          
+          
+          
+          
+          
+          
+          
+          
+          
+          
+          
+          
+          
+          
+          
+          
           // === google calendar ===
-          case "calendar.getStatus": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getCalendarStatus(args, userId, pool);
-            break;
-          }
-          case "calendar.getAuthUrl": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getCalendarAuthUrl(args, userId, pool);
-            break;
-          }
-          case "calendar.disconnect": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await disconnectCalendar(args, userId, pool);
-            break;
-          }
-          case "calendar.getEvents": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getCalendarEvents(args, userId, pool);
-            break;
-          }
-          case "calendar.createEvent": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await createCalendarEvent(args, userId, pool);
-            break;
-          }
-          case "calendar.deleteEvent": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await deleteCalendarEvent(args, userId, pool);
-            break;
-          }
+          
+          
+          
+          
+          
+          
           // === webhook hub / api keys ===
-          case "webhooks.listApiKeys": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await listApiKeys(args, userId, pool);
-            break;
-          }
-          case "webhooks.createApiKey": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await createApiKey(args, userId, pool);
-            break;
-          }
-          case "webhooks.revokeApiKey": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await revokeApiKey(args, userId, pool);
-            break;
-          }
-          case "webhooks.listEndpoints": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await listWebhooks(args, userId, pool);
-            break;
-          }
-          case "webhooks.createEndpoint": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await createWebhook(args, userId, pool);
-            break;
-          }
-          case "webhooks.updateEndpoint": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await updateWebhook(args, userId, pool);
-            break;
-          }
-          case "webhooks.deleteEndpoint": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await deleteWebhook(args, userId, pool);
-            break;
-          }
-          case "webhooks.testFire": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await testFireWebhook(args, userId, pool);
-            break;
-          }
-          case "webhooks.getLogs": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getWebhookLogs(args, userId, pool);
-            break;
-          }
-          case "webhooks.getManifest": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getZapierManifest(args, userId, pool);
-            break;
-          }
+          
+          
+          
+          
+          
+          
+          
+          
+          
+          
           case "markups.listPresets": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             const presets = (await pool.query("SELECT * FROM markup_presets WHERE user_id=$1 ORDER BY name", [userId])).rows;
@@ -2839,110 +2837,44 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
             break;
           }
           // === SMS notifications ===
-          case "sms.getSettings": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getSmsSettings(pool, userId);
-            break;
-          }
-          case "sms.saveSettings": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await saveSmsSettings(pool, userId, !!args?.data?.enabled);
-            break;
-          }
-          case "sms.send": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await sendSms(pool, userId, args?.data || {});
-            break;
-          }
-          case "sms.sendTest": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await sendSms(pool, userId, { to: args?.data?.phone || "", type: "test", vars: args?.data?.vars || { businessName: "" } });
-            break;
-          }
+          
+          
+          
+          
           case "sms.getLogs": {
             if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
             result = { logs: await getSmsLogs(pool, userId, args?.data?.limit || 50) };
             break;
           }
           // === Reporting dashboard ===
-          case "reports.filters": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getReportFilters(pool, userId, args?.data || {});
-            break;
-          }
-          case "reports.profitability": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getProfitability(pool, userId, args?.data || {});
-            break;
-          }
-          case "reports.winLoss": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getWinLoss(pool, userId, args?.data || {});
-            break;
-          }
-          case "reports.estimatorPerformance": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getEstimatorPerformance(pool, userId, args?.data || {});
-            break;
-          }
-          case "reports.revenueTrends": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getRevenueTrends(pool, userId, args?.data || {});
-            break;
-          }
-          case "reports.costBreakdown": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getCostBreakdown(pool, userId, args?.data || {});
-            break;
-          }
+          
+          
+          
+          
+          
+          
           // === Template marketplace ===
-          case "templates.publish": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await publishListing(pool, userId, args?.data || {});
-            break;
-          }
-          case "templates.unpublish": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await unpublishListing(pool, userId, args?.data || {});
-            break;
-          }
-          case "templates.getMyListings": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getMyListings(pool, userId, args?.data || {});
-            break;
-          }
-          case "templates.search": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await searchListings(pool, userId, args?.data || {});
-            break;
-          }
-          case "templates.getListing": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await getListingDetail(pool, userId, args?.data || {});
-            break;
-          }
-          case "templates.checkout": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await checkoutListing(pool, userId, args?.data || {});
-            break;
-          }
-          case "templates.install": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await installListing(pool, userId, args?.data || {});
-            break;
-          }
-          case "templates.rate": {
-            if (!userId) { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
-            result = await rateListing(pool, userId, args?.data || {});
-            break;
-          }
+          
+          
+          
+          
+          
+          
+          
+          
           default: { res.statusCode = 501; res.end(JSON.stringify({ error: "Unknown function: " + fnName + ". Check the function name and try again." })); return; }
         }
+        }
         res.statusCode = 200; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(result));
-      } catch (e: any) { res.statusCode = 500; res.end(JSON.stringify({ error: e.message || "Internal error" })); }
+      } catch (e: any) {
+        console.error("[api/call]", fnName, e?.message || e);
+        if (e?.message === "Not authenticated") { res.statusCode = 401; res.end(JSON.stringify({ error: "Not authenticated" })); return; }
+        res.statusCode = 500; res.end(JSON.stringify({ error: e.message || "Internal error" }));
+      }
       return;
     }
     // === Customer portal auth ===
+    if (req.method === "POST" && url === "/portal/login") { const wr = await handlePortalLoginForm(await readRawBody(req)); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
     if (req.method === "POST" && url === "/api/portal/login") { const wr = await handleClientLogin(await readBody(req)); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
     if (req.method === "POST" && url === "/api/portal/logout") { const wr = await handleClientLogout(req); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }
     if (req.method === "GET" && url === "/api/portal/me") { const wr = await handleClientMe(req); res.statusCode = wr.status; wr.headers.forEach((v: string, k: string) => res.setHeader(k, v)); res.end(await wr.text()); return; }

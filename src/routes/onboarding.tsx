@@ -33,8 +33,8 @@ function OnboardingPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            function: "estimates.create",
-            args: { data: { project_name: projectName, customer_name: customerName, trade } },
+            function: "estimates.createEstimate",
+            args: { data: { projectName, customerName, trade } },
           }),
           credentials: "include",
         });
