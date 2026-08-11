@@ -93,6 +93,15 @@ export async function getDb() {
       markup_percent REAL NOT NULL DEFAULT 0,
       sort_order INTEGER NOT NULL DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS signatures (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+      estimate_id TEXT NOT NULL REFERENCES estimates(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      signature_data TEXT NOT NULL,
+      signed_by_name TEXT DEFAULT '',
+      signed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_signatures_estimate ON signatures(estimate_id);
     CREATE TABLE IF NOT EXISTS feedback (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

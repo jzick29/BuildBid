@@ -13,7 +13,6 @@ function EstimateDetail() {
   const router = useRouter();
   const params = Route.useParams();
   const id = params.id;
-  if (!id) return null;
   const [user, setUser] = useState<any>(null);
   const [estimate, setEstimate] = useState<any>(null);
   const [lineItems, setLineItems] = useState<any[]>([]);
@@ -49,6 +48,7 @@ function EstimateDetail() {
   const [showProposalForm, setShowProposalForm] = useState(false);
   const [signature, setSignature] = useState<any>(null);
   const [savingSignature, setSavingSignature] = useState(false);
+  const [signatureError, setSignatureError] = useState<string | null>(null);
   // Time tracking
   const [timeEntries, setTimeEntries] = useState<any[]>([]);
   const [timeSummary, setTimeSummary] = useState<any>(null);
@@ -242,6 +242,7 @@ function EstimateDetail() {
 
   const handleSaveSignature = async (dataUrl: string) => {
     setSavingSignature(true);
+    setSignatureError(null);
     try {
       const res = await fetch("/api/call", {
         method: "POST",
@@ -264,7 +265,7 @@ function EstimateDetail() {
       const sData = await sRes.json();
       if (sData?.signature) setSignature(sData.signature);
     } catch (e: any) {
-      alert("Failed to save signature: " + (e.message || "Unknown error"));
+      setSignatureError(e.message || "Unknown error");
     } finally {
       setSavingSignature(false);
     }
@@ -501,6 +502,7 @@ function EstimateDetail() {
   const taxAmount = afterMarkup * (taxRate / 100);
   const grandTotal = afterMarkup + taxAmount;
 
+  if (!id) return null;
   if (loading) return <div className="flex min-h-dvh items-center justify-center"><p className="text-gray-500">Loading...</p></div>;
   if (error) return <div className="flex min-h-dvh items-center justify-center"><p className="text-red-500">{error}</p></div>;
   if (!user || !estimate) return null;
@@ -668,6 +670,9 @@ return (
             />
             {savingSignature && (
               <p className="mt-2 text-xs text-gray-500">Saving signature...</p>
+            )}
+            {signatureError && (
+              <p className="mt-2 text-sm text-red-600 dark:text-red-400">{signatureError}</p>
             )}
           </div>
         )}
