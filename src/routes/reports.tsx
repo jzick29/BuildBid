@@ -27,6 +27,8 @@ function ReportsPage() {
   const [filterMeta, setFilterMeta] = useState<any>({ trades: [], estimators: [] });
   const [months, setMonths] = useState(12);
   const [data, setData] = useState<any>(null);
+  const [costErr, setCostErr] = useState(false);
+  const COST_FALLBACK = { breakdown: [], totals: { material: 0, labor: 0, other: 0, source: "estimated" } };
 
   const call = useCallback(async (fn: string, data: any) => {
     const res = await fetch("/api/call", {
@@ -47,8 +49,10 @@ function ReportsPage() {
         call("reports.revenueTrends", { ...f, months: m }),
         call("reports.costBreakdown", f),
       ]);
+      const costOk = cost && !cost.error && cost.breakdown;
+      setCostErr(!costOk);
       setFilterMeta(filtersRes);
-      setData({ profit: prof, winLoss: wl, estimators: est, revenue: rev, cost });
+      setData({ profit: prof, winLoss: wl, estimators: est, revenue: rev, cost: costOk ? cost : COST_FALLBACK });
       setError("");
     } catch (e: any) { setError(e.message || "Failed to load reports"); }
     finally { setLoading(false); }
@@ -94,7 +98,7 @@ function ReportsPage() {
   const winLoss = data?.winLoss || { summary: { total: 0, won: 0, lost: 0, winRate: 0 }, byTrade: [], byMonth: [], bySize: [] };
   const profit = data?.profit || { jobs: [], summary: { totalEstimatedRevenue: 0, avgMarginPct: 0, bestTrade: null, jobsWithActuals: 0 } };
   const revenue = data?.revenue || { series: [], totals: { ytd: 0, projection: 0 } };
-  const cost = data?.cost || { breakdown: [], totals: { material: 0, labor: 0, other: 0, source: "estimated" } };
+  const cost = (data?.cost && !data.cost.error && data.cost.totals) ? data.cost : { breakdown: [], totals: { material: 0, labor: 0, other: 0, source: "estimated" } };
   const estimators = data?.estimators?.estimators || [];
 
   const wonRevenue = winLoss.byMonth.reduce((s: number, r: any) => s + Number(r.revenue || 0), 0);
@@ -216,7 +220,12 @@ function ReportsPage() {
 
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
           {/* Cost breakdown */}
-          {cost.breakdown.length > 0 && (
+          {costErr ? (
+            <div className="print-block rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+              <h2 className="text-lg font-semibold">Cost Breakdown</h2>
+              <p className="mt-2 text-sm text-gray-500">Unavailable — cost data could not be loaded.</p>
+            </div>
+          ) : cost.breakdown.length > 0 && (
             <div className="print-block rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
               <h2 className="text-lg font-semibold">Cost Breakdown</h2>
               <p className="text-sm text-gray-500">{cost.totals.source === "actual" ? "Actual costs by trade" : "Estimated costs by trade (labor units vs materials)"}</p>

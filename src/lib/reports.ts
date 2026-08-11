@@ -251,15 +251,27 @@ export const getRevenueTrends = makeAuthFn("reports.revenueTrends", async (args,
 export const getCostBreakdown = makeAuthFn("reports.costBreakdown", async (args, userId, pool) => {
   const { where, params } = await buildScope(pool, userId, args?.data || {});
   const rows = (await pool.query(
-    `SELECT e.trade,
-       SUM(e.actual_material_cost) AS actual_material,
-       SUM(e.actual_labor_cost) AS actual_labor,
-       SUM(e.actual_other_cost) AS actual_other,
-       COUNT(*) FILTER (WHERE (e.actual_material_cost + e.actual_labor_cost + e.actual_other_cost) > 0) AS jobs_with_actuals,
-       COALESCE((SELECT SUM(li.quantity * li.unit_cost) FROM line_items li WHERE li.estimate_id = e.id AND LOWER(COALESCE(li.unit,'')) IN ('hr','hrs','hour','hours','manhour','man-hours')), 0) AS est_labor,
-       COALESCE((SELECT SUM(li.quantity * li.unit_cost) FROM line_items li WHERE li.estimate_id = e.id AND LOWER(COALESCE(li.unit,'')) NOT IN ('hr','hrs','hour','hours','manhour','man-hours')), 0) AS est_material,
-       COALESCE((SELECT SUM((li.quantity * li.unit_cost) * (li.markup_percent / 100.0)) FROM line_items li WHERE li.estimate_id = e.id), 0) AS est_markup
-     FROM estimates e ${where} GROUP BY e.trade ORDER BY (SUM(e.actual_material_cost) + SUM(e.actual_labor_cost) + SUM(e.actual_other_cost)) DESC`, params)).rows;
+    `SELECT t.trade,
+       SUM(t.actual_material) AS actual_material,
+       SUM(t.actual_labor) AS actual_labor,
+       SUM(t.actual_other) AS actual_other,
+       COUNT(*) FILTER (WHERE t.actual_total > 0) AS jobs_with_actuals,
+       COALESCE(SUM(t.est_labor), 0) AS est_labor,
+       COALESCE(SUM(t.est_material), 0) AS est_material,
+       COALESCE(SUM(t.est_markup), 0) AS est_markup
+     FROM (
+       SELECT e.trade,
+         COALESCE(e.actual_material_cost, 0) AS actual_material,
+         COALESCE(e.actual_labor_cost, 0) AS actual_labor,
+         COALESCE(e.actual_other_cost, 0) AS actual_other,
+         COALESCE(e.actual_material_cost, 0) + COALESCE(e.actual_labor_cost, 0) + COALESCE(e.actual_other_cost, 0) AS actual_total,
+         (SELECT SUM(li.quantity * li.unit_cost) FROM line_items li WHERE li.estimate_id = e.id AND LOWER(COALESCE(li.unit,'')) IN ('hr','hrs','hour','hours','manhour','man-hours')) AS est_labor,
+         (SELECT SUM(li.quantity * li.unit_cost) FROM line_items li WHERE li.estimate_id = e.id AND LOWER(COALESCE(li.unit,'')) NOT IN ('hr','hrs','hour','hours','manhour','man-hours')) AS est_material,
+         (SELECT SUM((li.quantity * li.unit_cost) * (li.markup_percent / 100.0)) FROM line_items li WHERE li.estimate_id = e.id) AS est_markup
+       FROM estimates e ${where}
+     ) t
+     GROUP BY t.trade
+     ORDER BY (SUM(t.actual_material) + SUM(t.actual_labor) + SUM(t.actual_other)) DESC`, params)).rows;
 
   const hasActuals = rows.some((r: any) => num(r.actual_material) + num(r.actual_labor) + num(r.actual_other) > 0);
   const breakdown = rows.map((r: any) => {
