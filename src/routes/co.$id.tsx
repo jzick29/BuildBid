@@ -15,7 +15,7 @@ function CoPage() {
   const handleResponse = async (approved: boolean) => {
     setResponding(true);
     try {
-      const res = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "changeOrders.approveChangeOrder", args: { data: { id: changeOrder.id } } }), credentials: "include" }) ;
+      const res = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "changeOrderWorkflow.approveChangeOrder", args: { data: { changeOrderId: changeOrder.id, approved } } }), credentials: "include" }) ;
       setStatus(res.status);
     } catch(e) {}
     finally { setResponding(false); }
