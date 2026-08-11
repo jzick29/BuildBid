@@ -26,8 +26,11 @@ cp -R dist/client .vercel/output/static
 rm -f .vercel/output/static/index.html   # SSR owns "/", not a static shell
 
 echo "[3/3] bundle SSR handler + deps into the render function"
-bun build vercel-entry.ts --target node \
-  --outfile .vercel/output/functions/render.func/index.mjs
+npx esbuild vercel-entry.ts --bundle --platform=node --format=esm \
+  --external:'#tanstack-*' \
+  --external:'tanstack-start-manifest:*' \
+  --outfile=.vercel/output/functions/render.func/index.mjs \
+  --target=node22
 
 cat > .vercel/output/functions/render.func/.vc-config.json <<'JSON'
 { "runtime": "nodejs22.x", "handler": "index.mjs", "launcherType": "Nodejs", "supportsResponseStreaming": true }

@@ -69,5 +69,5 @@ export const getUpcomingVisits = makeAuthFn("contracts.getUpcomingVisits", async
 });
 
 export const getExpiringContracts = makeAuthFn("contracts.getExpiringContracts", async (_args, userId, pool) => {
-  return (await pool.query("SELECT * FROM contracts WHERE user_id = $1 AND status = 'active' AND end_date != '' AND end_date <= CURRENT_DATE + INTERVAL '30 days' ORDER BY end_date", [userId])).rows;
+  return (await pool.query("SELECT * FROM contracts WHERE user_id = $1 AND status = 'active' AND end_date IS NOT NULL AND NULLIF(end_date, '') IS NOT NULL AND NULLIF(end_date, '')::date <= CURRENT_DATE + 30 ORDER BY NULLIF(end_date, '')::date", [userId])).rows;
 });
