@@ -21,6 +21,7 @@ import {
   listApiKeys, createApiKey, revokeApiKey, listWebhooks, createWebhook, updateWebhook, deleteWebhook, testFireWebhook, getWebhookLogs, getZapierManifest, fireWebhook, verifyApiKey,
 } from "./src/lib/webhooks";
 import { trackEvent } from "./src/lib/analytics";
+import "./src/lib/signatures"; // side-effect: registers signatures.saveSignature / signatures.getSignature handlers at boot
 
 const getPool = () => {
   if (!(globalThis as any).__buildbid_pool) {
@@ -362,6 +363,9 @@ export default async function vercelHandler(req: IncomingMessage, res: ServerRes
         `CREATE INDEX IF NOT EXISTS idx_analytics_user ON analytics_events(user_id)`,
         `CREATE INDEX IF NOT EXISTS idx_analytics_type ON analytics_events(event_type)`,
         `CREATE INDEX IF NOT EXISTS idx_analytics_created ON analytics_events(created_at)`,
+        // === digital signatures ===
+        `CREATE TABLE IF NOT EXISTS signatures (id TEXT PRIMARY KEY DEFAULT gen_random_uuid(), estimate_id TEXT NOT NULL REFERENCES estimates(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, signature_data TEXT NOT NULL, signed_by_name TEXT DEFAULT '', signed_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+        `CREATE INDEX IF NOT EXISTS idx_signatures_estimate ON signatures(estimate_id)`,
         ];
         for (const t of appTables) {
         try { await pool.query(t); } catch (e) { console.error("App table create error:", e); }
