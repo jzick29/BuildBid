@@ -5,7 +5,7 @@ import { MobileEstimateActions } from "~/components/MobileEstimateActions";
 import { PhotoUpload } from "~/components/PhotoUpload";
 
 export const Route = createFileRoute("/estimates/$id")({
-  loader: async () => ({}),
+
   component: EstimateDetail,
 });
 

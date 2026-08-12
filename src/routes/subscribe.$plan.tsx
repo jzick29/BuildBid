@@ -15,7 +15,7 @@ const prices: Record<string, { monthly: number; annual: number }> = {
 };
 
 export const Route = createFileRoute("/subscribe/$plan")({
-  loader: async () => ({}),
+
   component: SubscribePage,
 });
 

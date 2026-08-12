@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/integrations")({
   component: IntegrationsPage,
-  loader: async () => ({}),
+
 });
 
 const PLATFORM_META: Record<string, { name: string; logo: string; color: string }> = {

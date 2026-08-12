@@ -2,7 +2,7 @@ import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-rout
 import { useState, useCallback } from "react";
 
 export const Route = createFileRoute("/import")({
-  loader: async () => ({}),
+
   component: ImportPage,
 });
 

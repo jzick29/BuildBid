@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect } from "react";
 
 export const Route = createFileRoute("/sign/$estimateId")({
-  loader: async () => ({}),
+
   component: SignPage,
 });
 

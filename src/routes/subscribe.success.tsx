@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 
 
 export const Route = createFileRoute("/subscribe/success")({
-  loader: async () => ({}),
+
   component: SuccessPage,
 });
 

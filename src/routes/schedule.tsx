@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 
 export const Route = createFileRoute("/schedule")({
-  loader: async () => ({}),
+
   component: SchedulePage,
 });
 

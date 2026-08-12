@@ -170,7 +170,7 @@ const TRADE_INFO: Record<string, TradeInfo> = {
 };
 
 export const Route = createFileRoute("/trade/$slug")({
-  loader: async () => ({}),
+
   component: TradeLanding,
   head: ({ params }) => {
     const info = TRADE_INFO[params.slug as string];
