@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/free-estimating-template-pdf/")({
   component: PdfTemplatePage,
-  loader: async () => ({}),
 });
 
 function PdfTemplatePage() {
