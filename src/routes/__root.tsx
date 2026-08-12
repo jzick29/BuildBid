@@ -39,6 +39,7 @@ export const Route = createRootRoute({
     ],
   }),
   notFoundComponent: () => <div>Page not found</div>,
+  errorComponent: RootErrorComponent,
   component: RootComponent,
 });
 
@@ -121,6 +122,27 @@ const navSections: NavSection[] = [
     ],
   },
 ];
+
+function RootErrorComponent({ error }: { error?: Error }) {
+  return (
+    <div style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", background: "linear-gradient(135deg, #312e81 0%, #4c1d95 50%, #1e1b4b 100%)" }}>
+      <div style={{ width: "100%", maxWidth: "28rem", background: "#ffffff", borderRadius: "16px", padding: "32px", textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,0.35)" }}>
+        <div style={{ fontSize: "32px", marginBottom: "8px" }}>⚠️</div>
+        <h1 style={{ fontSize: "20px", fontWeight: 700, color: "#111827", margin: 0 }}>Something went wrong</h1>
+        <p style={{ marginTop: "8px", fontSize: "14px", color: "#6b7280", lineHeight: 1.5 }}>
+          The page hit an unexpected error. Try reloading, or head back to the dashboard.
+        </p>
+        {error?.message ? (
+          <p style={{ marginTop: "12px", padding: "8px 12px", background: "#fef2f2", color: "#b91c1c", borderRadius: "8px", fontSize: "12px", wordBreak: "break-word", textAlign: "left" }}>{error.message}</p>
+        ) : null}
+        <div style={{ marginTop: "24px", display: "flex", gap: "12px" }}>
+          <a href="/" style={{ flex: 1, display: "block", background: "#4f46e5", color: "#fff", borderRadius: "8px", padding: "10px 16px", fontSize: "14px", fontWeight: 600, textDecoration: "none" }}>Go to Home</a>
+          <button onClick={() => window.location.reload()} style={{ flex: 1, background: "transparent", color: "#111827", borderRadius: "8px", padding: "10px 16px", fontSize: "14px", fontWeight: 600, border: "1px solid #d1d5db", cursor: "pointer" }}>Reload</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function RootComponent() {
   const location = useLocation();

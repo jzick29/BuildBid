@@ -90,7 +90,7 @@ makeAuthFn("expenses.getExpenseSummary", async (args: any, userId: string, pool:
 
   // Get estimated total from line items
   const estResult = await pool.query(
-    `SELECT COALESCE(SUM(quantity * (unit_cost + (unit_cost * markup_pct / 100.0))), 0) as estimated_total
+    `SELECT COALESCE(SUM(quantity * (unit_cost + (unit_cost * markup_percent / 100.0))), 0) as estimated_total
      FROM line_items
      WHERE estimate_id = $1`,
     [estimateId]

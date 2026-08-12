@@ -157,7 +157,7 @@ function EstimateDetail() {
         if (teData?.timeEntries) setTimeEntries(teData.timeEntries);
         if (tsData) setTimeSummary(tsData);
         if (expData?.expenses) setExpenses(expData.expenses);
-        if (expSumData) setExpenseSummary(expSumData);
+        if (expSumData && !expSumData.error && typeof expSumData.estimatedTotal === 'number') setExpenseSummary(expSumData);
         if (photosData) setPhotos(photosData);
       })
       .catch(e => setError(e.message))
@@ -347,7 +347,7 @@ function EstimateDetail() {
         fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ function: "expenses.getExpenseSummary", args: { data: { estimateId: id } } }), credentials: "include" }).then(r => r.json()),
       ]);
       if (expRes?.expenses) setExpenses(expRes.expenses);
-      if (sumRes) setExpenseSummary(sumRes);
+      if (sumRes && !sumRes.error && typeof sumRes.estimatedTotal === 'number') setExpenseSummary(sumRes);
     } catch (e: any) {
       alert("Failed: " + (e.message || "Unknown error"));
     } finally { setSavingExpense(false); }
@@ -368,7 +368,7 @@ function EstimateDetail() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ function: "expenses.getExpenseSummary", args: { data: { estimateId: id } } }),
       credentials: "include",
-    }).then(r => r.json()).then(d => { if (d) setExpenseSummary(d); });
+    }).then(r => r.json()).then(d => { if (d && !d.error && typeof d.estimatedTotal === 'number') setExpenseSummary(d); });
   };
 
   const handleCompare = async () => {
@@ -760,7 +760,7 @@ return (
             {showExpenseForm ? "Cancel" : "Add Expense"}
           </button>
         </div>
-        {expenseSummary && (
+        {expenseSummary && typeof expenseSummary.estimatedTotal === 'number' && typeof expenseSummary.totalExpenses === 'number' && (
           <div className="mb-4 space-y-3">
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-900">
