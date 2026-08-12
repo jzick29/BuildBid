@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect, useMemo, useRef } from "react";
 
 export const Route = createFileRoute("/templates")({
-  loader: async () => ({}),
+
   component: TemplatesPage,
 });
 

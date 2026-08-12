@@ -2,7 +2,7 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 
 export const Route = createFileRoute("/pipeline")({
-  loader: async () => ({}),
+
   component: PipelinePage,
 });
 

@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { AiEstimator } from "../components/AiEstimator";
 
 export const Route = createFileRoute("/ai-estimate")({
-  loader: async () => ({}),
+
   component: AiEstimatePage,
 });
 

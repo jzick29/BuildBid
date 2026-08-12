@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/price-lists")({
   component: PriceListsPage,
-  loader: async () => ({}),
+
 });
 
 function PriceListsPage() {

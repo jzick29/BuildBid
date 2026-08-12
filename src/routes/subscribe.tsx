@@ -25,7 +25,7 @@ const plans = [
 ];
 
 export const Route = createFileRoute("/subscribe")({
-  loader: async () => ({}),
+
   component: PlansPage,
 });
 

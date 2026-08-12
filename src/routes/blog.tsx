@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { blogPosts, type BlogPost } from "~/lib/blog-posts";
 
 export const Route = createFileRoute("/blog")({
-  loader: async () => ({}),
+
   component: BlogPage,
   head: () => ({
     meta: [
