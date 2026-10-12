@@ -32,6 +32,32 @@ const FEATURE_COMPARISON = [
 
 export const Route = createFileRoute("/")({
   component: Home,
+  head: () => ({
+    meta: [
+      { title: "Estimating Software for Trade Contractors | BuildBid" },
+      {
+        name: "description",
+        content:
+          "BuildBid helps electrical, HVAC, plumbing, roofing and general contractors (1–50 employees) estimate faster with 22 pre-built templates, AI-assisted estimating, and a live margin calculator. Free 14-day trial, no credit card.",
+      },
+      { property: "og:title", content: "BuildBid — Win More Profitable Work" },
+      {
+        property: "og:description",
+        content:
+          "Estimating software for trade contractors. 22 pre-built templates, AI-assisted estimating, professional PDF proposals, live margin calculator. Free 14-day trial, no credit card.",
+      },
+      { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://buildbid.pro" },
+      { property: "og:image", content: "https://buildbid.pro/og-image.png" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "BuildBid — Estimating Software for Trade Contractors" },
+      {
+        name: "twitter:description",
+        content:
+          "22 pre-built templates, AI-assisted estimating, professional proposals. Free 14-day trial, no credit card.",
+      },
+    ],
+  }),
 });
 
 function Home() {
@@ -70,16 +96,21 @@ function Home() {
           Win more profitable work with less overhead
         </h1>
         <p className="mt-6 max-w-xl text-lg text-gray-600 dark:text-gray-400">
-          BuildBid replaces spreadsheets and pen-and-paper with line-item assemblies,
-          professional proposals, and job tracking — built for trade contractors who want
-          to bid faster and win more.
+          BuildBid is estimating software for trade contractors with 1–50 employees.
+          It replaces spreadsheets and pen-and-paper with line-item assemblies,
+          professional proposals, and job tracking — so you bid faster and win more.
         </p>
+        <div className="mt-8 flex flex-col items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-400">
+          <span>✓ 22 pre-built templates across electrical, HVAC, plumbing, roofing &amp; general</span>
+          <span>✓ AI-assisted estimating — describe the job, get realistic line items to edit</span>
+          <span>✓ Live margin warnings — catch a money-losing bid before you send it</span>
+        </div>
         <div className="mt-10 flex gap-4">
           <Link to="/signup" className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">
             Start Estimating Free
           </Link>
-          <a href="#features" className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900">
-            See Features
+          <a href="#pricing" className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-900">
+            See Pricing
           </a>
         </div>
         <p className="mt-4 text-sm text-gray-400">No credit card required. 14-day full access.</p>
@@ -90,10 +121,10 @@ function Home() {
 
       {/* Social proof bar */}
       <section className="border-t border-gray-200 bg-indigo-600 px-6 py-14 dark:bg-indigo-950">
-        <p className="text-center text-sm font-semibold uppercase tracking-wider text-indigo-200 mb-8">Trusted by contractors across 5 trades</p>
+        <p className="text-center text-sm font-semibold uppercase tracking-wider text-indigo-200 mb-8">Built for contractors across 5 trades</p>
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-8 text-center sm:gap-16">
           {[
-            { value: "22+", label: "Pre-built Templates" },
+            { value: "22", label: "Pre-built Templates" },
             { value: "224", label: "Supplier Catalog Items" },
             { value: "5", label: "Trades Supported" },
             { value: "14-Day", label: "Free Trial" },
@@ -127,7 +158,7 @@ function Home() {
           <p className="mt-4 text-center text-gray-600 dark:text-gray-400">Purpose-built for trade contractors who are done with spreadsheets.</p>
           <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {[
-              { illo: "assemblies", title: "Line-Item Assemblies", desc: "Pre-built cost databases by trade with 22+ templates. Go from hours to minutes on every bid with real supplier pricing." },
+              { illo: "assemblies", title: "Line-Item Assemblies", desc: "Pre-built cost databases by trade with 22 templates. Go from hours to minutes on every bid with real supplier pricing." },
               { illo: "proposals", title: "Professional Proposals", desc: "Turn estimates into branded, customer-ready PDF proposals with digital signature capture in one click." },
               { illo: "ai", title: "AI-Assisted Estimating", desc: "Describe a job in plain English and get a populated estimate with realistic line items from a 224-item supplier catalog." },
               { illo: "takeoff", title: "Plan Room Takeoff", desc: "Upload blueprints, calibrate scale, and measure lengths, areas, and counts right on screen with a canvas overlay." },
@@ -302,27 +333,21 @@ function Home() {
         </div>
       </section>
 
-      {/* Social proof */}
+      {/* Why replace your spreadsheet */}
       <section className="border-t border-gray-200 bg-white px-6 py-20 dark:border-gray-800 dark:bg-gray-950">
         <div className="mx-auto max-w-6xl">
-          <h2 className="text-center text-3xl font-bold">Built for contractors, by people who get it</h2>
-          <p className="mt-4 text-center text-gray-600 dark:text-gray-400">Every feature is designed around how trade contractors actually work — not how software companies think they should work.</p>
+          <h2 className="text-center text-3xl font-bold">Built to replace your spreadsheet</h2>
+          <p className="mt-4 text-center text-gray-600 dark:text-gray-400">If you're still pricing jobs in Excel, you've felt these — and BuildBid is built to fix them.</p>
           <div className="mt-12 grid gap-8 sm:grid-cols-3">
             {[
-              { quote: "I used to spend Sunday nights in Excel. Now I knock out estimates in 5 minutes and my proposals look professional.", name: "Mike R.", company: "Riverside Electric", initials: "MR", color: "bg-indigo-500" },
-              { quote: "The margin calculator alone has saved me thousands. I caught three bids last month that would have lost money.", name: "Dave T.", company: "Summit Air & Heat", initials: "DT", color: "bg-emerald-500" },
-              { quote: "The AI estimating is surprisingly good. I described a kitchen remodel and it populated a complete estimate in seconds.", name: "Sarah K.", company: "Kline Custom Builds", initials: "SK", color: "bg-amber-500" },
-            ].map((t, i) => (
-              <div key={i} className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-                <svg className="mb-4 h-8 w-8 text-indigo-300 dark:text-indigo-700" fill="currentColor" viewBox="0 0 24 24"><path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" /></svg>
-                <p className="text-sm italic text-gray-600 dark:text-gray-400">{t.quote}</p>
-                <div className="mt-4 flex items-center gap-3">
-                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${t.color} text-xs font-bold text-white`}>{t.initials}</span>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-900 dark:text-gray-100">{t.name}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{t.company}</p>
-                  </div>
-                </div>
+              { icon: "📉", title: "Bids that quietly lose money", desc: "A spreadsheet won't warn you when your margin disappears. BuildBid's live margin calculator turns yellow and red before you send a losing bid." },
+              { icon: "🔄", title: "Rebuilding every bid from scratch", desc: "Don't start from a blank grid. Start from 22 pre-built trade templates — or describe the job to our AI and adjust the line items it returns." },
+              { icon: "📄", title: "Proposals that don't look professional", desc: "One click turns any estimate into a branded, customer-ready PDF proposal with digital signature capture — no cutting and pasting into Word." },
+            ].map((c, i) => (
+              <div key={i} className="rounded-xl border border-gray-200 p-6 dark:border-gray-800 dark:bg-gray-900">
+                <div className="mb-3 text-3xl">{c.icon}</div>
+                <h3 className="text-lg font-semibold">{c.title}</h3>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{c.desc}</p>
               </div>
             ))}
           </div>
@@ -337,6 +362,7 @@ function Home() {
             {[
               { q: "Is there a free trial?", a: "Yes — your first 14 days are completely free with full access to all features. No credit card required. Create estimates, generate proposals, and see if BuildBid works for your business before committing." },
               { q: "Can I customize line items?", a: "Absolutely. Every template is a starting point. Change quantities, unit costs, markup percentages, and add or remove line items. You can also build estimates from scratch and save them as your own reusable templates." },
+              { q: "I already estimate in Excel. Why switch?", a: "Excel works — right up until a bid goes out with a missed line item or a margin you can't see. BuildBid starts you from 22 pre-built trade templates, keeps your profit margin live on every line, and turns the estimate into a branded PDF proposal in one click. Try it free for 14 days with no credit card, and copy one of your existing estimates in before you decide." },
               { q: "Does it work with QuickBooks or Xero?", a: "Yes — the Shop plan includes one-click export to QuickBooks and Xero. Send estimates as invoices, sync job costs, and import your item catalog. Starter and Pro plans include CSV/Excel export." },
               { q: "What trades do you support?", a: "Electrical, HVAC, plumbing, roofing, and general contracting — with 22 pre-built templates across all trades. We add new templates and trades based on customer feedback." },
               { q: "Can my team use it?", a: "Yes. The Pro plan supports up to 5 users, and the Shop plan supports unlimited users. Team members can create their own estimates with role-based permissions." },
@@ -354,11 +380,26 @@ function Home() {
         </div>
       </section>
 
+      {/* Free template lead magnet */}
+      <section className="border-t border-gray-200 bg-white px-6 py-16 dark:border-gray-800 dark:bg-gray-950">
+        <div className="mx-auto flex max-w-4xl flex-col items-center justify-between gap-6 rounded-2xl border border-indigo-200 bg-indigo-50 px-8 py-8 text-center sm:flex-row sm:text-left dark:border-indigo-900 dark:bg-indigo-950">
+          <div>
+            <h2 className="text-xl font-bold">Free estimating template</h2>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              A printable template with pre-built line items and markup on every row. Enter your email, grab the PDF, no credit card.
+            </p>
+          </div>
+          <Link to="/download-free-estimating-template" className="shrink-0 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700">
+            Get the Free Template
+          </Link>
+        </div>
+      </section>
+
       {/* Final CTA */}
       <section className="bg-indigo-600 px-6 py-20 dark:bg-indigo-700">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold text-white">Ready to win more profitable work?</h2>
-          <p className="mt-4 text-lg text-indigo-100">Join trade contractors who've replaced late-night spreadsheet sessions with five-minute estimates.</p>
+          <p className="mt-4 text-lg text-indigo-100">Stop rebuilding bids in spreadsheets. Put BuildBid to work on your next estimate.</p>
           <div className="mt-10 flex flex-col items-center gap-4">
             <Link to="/signup" className="rounded-lg bg-white px-8 py-4 text-base font-semibold text-indigo-600 shadow-lg hover:bg-indigo-50">Start Free Trial</Link>
             <p className="text-sm text-indigo-200">Free 14-day trial • No credit card • Cancel anytime</p>

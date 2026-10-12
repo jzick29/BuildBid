@@ -59,7 +59,7 @@ function DownloadTemplatePage() {
           <div className="text-5xl mb-4">📋</div>
           <h1 className="text-2xl font-bold mb-2">Your Template Is Ready!</h1>
           <p className="text-gray-600 dark:text-gray-400 mb-6">
-            We've sent the download link to <strong>{email}</strong>. Check your inbox (and spam folder) in the next few minutes.
+            Hit the button below to download it now — the link is live right away. No spam: if you'd rather not receive estimating tips, unsubscribe any time and we'll stop.
           </p>
           <a
             href="/free-estimating-template-pdf"
@@ -69,7 +69,7 @@ function DownloadTemplatePage() {
             Download Now →
           </a>
           <p className="mt-6 text-sm text-gray-500">
-            Want to try the full platform?{" "}
+            Want to build estimates online?{" "}
             <Link to="/signup" className="text-indigo-600 hover:text-indigo-500 font-medium">
               Start your 14-day free trial →
             </Link>
@@ -88,8 +88,8 @@ function DownloadTemplatePage() {
           Free {trade === "electrical" ? "Electrical" : trade === "hvac" ? "HVAC" : trade === "plumbing" ? "Plumbing" : trade === "roofing" ? "Roofing" : "Construction"} Estimating Template
         </h1>
         <p className="mt-4 text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-          Download our professional estimating spreadsheet — pre-built with line items, markup formulas, and a
-          customer-ready proposal format. Used by 500+ contractors to win more work.
+          Download our free printable estimating template — pre-built line items with markup on every row,
+          plus a customer-ready proposal layout. Fill in your numbers, print it, or copy it into your own spreadsheet.
         </p>
       </section>
 
@@ -145,7 +145,7 @@ function DownloadTemplatePage() {
                 {submitting ? "Sending..." : "Get My Free Template"}
               </button>
               <p className="text-xs text-gray-500 text-center">
-                No spam, ever. Unsubscribe anytime. We'll send the template and occasional estimating tips.
+                Free, no credit card. The download link appears right after you submit — and you can unsubscribe from tips anytime.
               </p>
             </form>
           </div>
@@ -157,23 +157,23 @@ function DownloadTemplatePage() {
               {[
                 {
                   icon: "📊",
-                  title: "Pre-Built Line Items",
-                  desc: `Common ${trade === "electrical" ? "electrical" : trade === "hvac" ? "HVAC" : trade === "plumbing" ? "plumbing" : trade === "roofing" ? "roofing" : "construction"} assemblies ready to use — panel upgrades, circuit runs, fixture installs, and more.`,
+                  title: "Pre-Built Line-Item Layout",
+                  desc: "Example rows show quantity, unit, unit cost, markup, and total for each line — swap in your own materials and labor and you're set.",
                 },
                 {
                   icon: "💰",
-                  title: "Automatic Markup & Margin",
-                  desc: "Formulas built in. Enter your material cost, set your markup %, and the spreadsheet calculates your sell price and margin automatically.",
+                  title: "Clear Markup & Margin",
+                  desc: "Every row shows quantity, unit cost, markup %, and total — so your sell price and margin are easy to see before you send the bid.",
                 },
                 {
                   icon: "📄",
                   title: "Customer-Ready Proposal",
-                  desc: "Estimates format into a clean, professional proposal you can print or email. Includes space for your logo and terms.",
+                  desc: "Estimates format into a clean, professional layout you can print or email. Includes space for your logo and terms.",
                 },
                 {
                   icon: "⏱️",
-                  title: "Save 2–3 Hours Per Bid",
-                  desc: "Stop reinventing the wheel. Start from templates, customize in minutes, and send proposals the same day.",
+                  title: "Start From a Template, Not a Blank Grid",
+                  desc: "Don't rebuild rows from scratch — fill in the pre-built line items, customize in minutes, and send the same day.",
                 },
               ].map((item) => (
                 <div key={item.title} className="flex gap-4">
@@ -186,13 +186,11 @@ function DownloadTemplatePage() {
               ))}
             </div>
 
-            {/* Social proof */}
+            {/* What you get */}
             <div className="bg-indigo-50 dark:bg-indigo-950 rounded-xl p-6">
-              <p className="text-sm text-indigo-700 dark:text-indigo-300 italic">
-                "This template saved me 3 hours on my first bid. The markup formulas alone are worth it."
-              </p>
-              <p className="mt-2 text-xs font-medium text-indigo-600 dark:text-indigo-400">
-                — Mike R., Licensed Electrician, 12 years
+              <p className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">Free, no credit card</p>
+              <p className="mt-2 text-sm text-indigo-700 dark:text-indigo-300">
+                The download link appears right after you submit. We won't share your email — and if we ever send estimating tips, you can unsubscribe in one click.
               </p>
             </div>
           </div>
@@ -202,7 +200,7 @@ function DownloadTemplatePage() {
       {/* Bottom CTA */}
       <section className="px-6 pb-20 text-center">
         <p className="text-gray-600 dark:text-gray-400 mb-4">
-          Want more than a spreadsheet? Try the full BuildBid platform free for 14 days.
+          Want to build estimates online? Try the full BuildBid platform free for 14 days.
         </p>
         <Link
           to="/signup"
